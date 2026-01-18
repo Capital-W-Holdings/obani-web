@@ -5521,6 +5521,272 @@ function AnalyticsPage() {
     );
   }
 
+  // PDF Export for Analytics
+  const exportAnalyticsPDF = () => {
+    if (!data) return;
+
+    const doc = new jsPDF();
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    let y = 20;
+
+    // Helper function for adding sections
+    const checkPageBreak = (requiredSpace: number) => {
+      if (y + requiredSpace > pageHeight - 20) {
+        doc.addPage();
+        y = 20;
+      }
+    };
+
+    // Title
+    doc.setFontSize(28);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(26, 26, 46); // Dark blue
+    doc.text('Network Analytics Report', 20, y);
+    y += 12;
+
+    // Date
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(100, 100, 100);
+    doc.text(`Generated: ${new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}`, 20, y);
+    y += 15;
+
+    // Divider
+    doc.setDrawColor(200);
+    doc.line(20, y, pageWidth - 20, y);
+    y += 15;
+
+    // Network Health Section
+    doc.setFontSize(18);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(30, 58, 95);
+    doc.text('Network Health Overview', 20, y);
+    y += 12;
+
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(50, 50, 50);
+
+    const healthMetrics = [
+      ['Total Contacts', data.networkHealth.totalContacts.toString()],
+      ['Active Contacts', data.networkHealth.activeContacts.toString()],
+      ['Need Attention', data.networkHealth.dormantContacts.toString()],
+      ['Average Strength', data.networkHealth.averageStrength.toFixed(1) + ' / 5'],
+    ];
+
+    healthMetrics.forEach(([label, value]) => {
+      doc.setFont('helvetica', 'normal');
+      doc.text(label + ':', 25, y);
+      doc.setFont('helvetica', 'bold');
+      doc.text(value, 80, y);
+      y += 7;
+    });
+    y += 8;
+
+    // Strength Distribution
+    if (data.networkHealth.strengthDistribution?.length > 0) {
+      doc.setFontSize(12);
+      doc.setFont('helvetica', 'bold');
+      doc.text('Relationship Strength Distribution:', 25, y);
+      y += 8;
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(10);
+      data.networkHealth.strengthDistribution.forEach(({ strength, count }) => {
+        const stars = '★'.repeat(strength) + '☆'.repeat(5 - strength);
+        doc.text(`${stars}  ${count} contacts`, 30, y);
+        y += 6;
+      });
+      y += 8;
+    }
+
+    // Divider
+    checkPageBreak(40);
+    doc.setDrawColor(220);
+    doc.line(20, y, pageWidth - 20, y);
+    y += 15;
+
+    // Interaction Trends
+    doc.setFontSize(18);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(30, 58, 95);
+    doc.text('Interaction Trends', 20, y);
+    y += 12;
+
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(50, 50, 50);
+
+    doc.text('Total Interactions:', 25, y);
+    doc.setFont('helvetica', 'bold');
+    doc.text(data.interactionTrends.totalInteractions.toString(), 80, y);
+    y += 7;
+
+    doc.setFont('helvetica', 'normal');
+    doc.text('Avg per Contact:', 25, y);
+    doc.setFont('helvetica', 'bold');
+    doc.text(data.interactionTrends.avgPerContact.toFixed(1), 80, y);
+    y += 10;
+
+    if (data.interactionTrends.byType?.length > 0) {
+      doc.setFontSize(12);
+      doc.setFont('helvetica', 'bold');
+      doc.text('By Type:', 25, y);
+      y += 8;
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(10);
+      data.interactionTrends.byType.forEach(({ type, count }) => {
+        const typeLabel = type.charAt(0) + type.slice(1).toLowerCase();
+        doc.text(`${typeLabel}: ${count}`, 30, y);
+        y += 6;
+      });
+      y += 8;
+    }
+
+    // Divider
+    checkPageBreak(50);
+    doc.setDrawColor(220);
+    doc.line(20, y, pageWidth - 20, y);
+    y += 15;
+
+    // Introduction Metrics
+    doc.setFontSize(18);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(30, 58, 95);
+    doc.text('Introduction Metrics', 20, y);
+    y += 12;
+
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(50, 50, 50);
+
+    const introMetrics = [
+      ['Introductions Made', data.introductionMetrics.totalMade.toString()],
+      ['Completed Successfully', data.introductionMetrics.totalCompleted.toString()],
+      ['Success Rate', (data.introductionMetrics.successRate * 100).toFixed(0) + '%'],
+    ];
+
+    introMetrics.forEach(([label, value]) => {
+      doc.setFont('helvetica', 'normal');
+      doc.text(label + ':', 25, y);
+      doc.setFont('helvetica', 'bold');
+      doc.text(value, 80, y);
+      y += 7;
+    });
+    y += 8;
+
+    // Network Equity Section (if available)
+    const equityMetrics = getNetworkEquityMetrics();
+    if (equityMetrics) {
+      checkPageBreak(60);
+      doc.setDrawColor(220);
+      doc.line(20, y, pageWidth - 20, y);
+      y += 15;
+
+      doc.setFontSize(18);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(30, 58, 95);
+      doc.text('Relationship Equity', 20, y);
+      y += 12;
+
+      doc.setFontSize(11);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(50, 50, 50);
+
+      const equityStats = [
+        ['Total Value Given', '+' + equityMetrics.totalGiven.toString()],
+        ['Total Value Taken', '-' + equityMetrics.totalTaken.toString()],
+        ['Net Equity', (equityMetrics.netEquity >= 0 ? '+' : '') + equityMetrics.netEquity.toString()],
+        ['Avg per Contact', equityMetrics.avgEquity.toFixed(1)],
+      ];
+
+      equityStats.forEach(([label, value]) => {
+        doc.setFont('helvetica', 'normal');
+        doc.text(label + ':', 25, y);
+        doc.setFont('helvetica', 'bold');
+        if (value.startsWith('+')) {
+          doc.setTextColor(22, 163, 74); // Green
+        } else if (value.startsWith('-')) {
+          doc.setTextColor(220, 38, 38); // Red
+        }
+        doc.text(value, 80, y);
+        doc.setTextColor(50, 50, 50);
+        y += 7;
+      });
+      y += 8;
+
+      // Status Distribution
+      doc.setFontSize(12);
+      doc.setFont('helvetica', 'bold');
+      doc.text('Equity Status Distribution:', 25, y);
+      y += 8;
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(10);
+
+      const statusLabels: Record<string, string> = {
+        SUPER_GIVER: 'Super Givers',
+        HEALTHY: 'Healthy',
+        BALANCED: 'Balanced',
+        OVERDRAWN: 'Overdrawn',
+        TOXIC: 'At Risk',
+      };
+
+      Object.entries(equityMetrics.statusCounts).forEach(([status, count]) => {
+        doc.text(`${statusLabels[status]}: ${count} contacts`, 30, y);
+        y += 6;
+      });
+    }
+
+    // Growth Metrics (if available)
+    if (data.growthMetrics) {
+      checkPageBreak(50);
+      doc.setDrawColor(220);
+      doc.line(20, y, pageWidth - 20, y);
+      y += 15;
+
+      doc.setFontSize(18);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(30, 58, 95);
+      doc.text('Network Growth', 20, y);
+      y += 12;
+
+      doc.setFontSize(11);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(50, 50, 50);
+
+      doc.text('This Month:', 25, y);
+      doc.setFont('helvetica', 'bold');
+      doc.text('+' + data.growthMetrics.thisMonth.toString() + ' contacts', 80, y);
+      y += 7;
+
+      doc.setFont('helvetica', 'normal');
+      doc.text('Last Month:', 25, y);
+      doc.setFont('helvetica', 'bold');
+      doc.text('+' + data.growthMetrics.lastMonth.toString() + ' contacts', 80, y);
+      y += 7;
+
+      doc.setFont('helvetica', 'normal');
+      doc.text('Growth Rate:', 25, y);
+      doc.setFont('helvetica', 'bold');
+      const growthSign = data.growthMetrics.growthRate >= 0 ? '+' : '';
+      doc.text(growthSign + data.growthMetrics.growthRate.toFixed(0) + '%', 80, y);
+    }
+
+    // Footer
+    const totalPages = doc.getNumberOfPages();
+    for (let i = 1; i <= totalPages; i++) {
+      doc.setPage(i);
+      doc.setFontSize(9);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(150, 150, 150);
+      doc.text(`Obani Network Analytics | Page ${i} of ${totalPages}`, pageWidth / 2, pageHeight - 10, { align: 'center' });
+    }
+
+    // Save the PDF
+    const fileName = `obani-analytics-${new Date().toISOString().split('T')[0]}.pdf`;
+    doc.save(fileName);
+  };
+
   if (!data) {
     return (
       <div className="analytics-page">
@@ -5540,6 +5806,9 @@ function AnalyticsPage() {
     <div className="analytics-page">
       <div className="page-header">
         <h1>Analytics</h1>
+        <button className="btn pdf-export" onClick={exportAnalyticsPDF}>
+          📄 Export PDF
+        </button>
       </div>
 
       <div className="stats-grid">
