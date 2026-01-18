@@ -16,6 +16,9 @@ export interface Contact {
   sectors: string[];
   needs: string[];
   offers: string[];
+  howWeMet?: string;
+  investmentTicketMin?: number;
+  investmentTicketMax?: number;
   linkedinUrl?: string;
   twitterUrl?: string;
   websiteUrl?: string;
@@ -31,6 +34,14 @@ export interface Contact {
 export type InteractionType = 'MEETING' | 'CALL' | 'EMAIL' | 'MESSAGE' | 'SOCIAL' | 'EVENT' | 'OTHER';
 export type Sentiment = 'POSITIVE' | 'NEUTRAL' | 'NEGATIVE';
 
+export interface ActionItem {
+  id: string;
+  text: string;
+  owner: 'me' | 'them' | 'both';
+  dueDate?: string;
+  completed: boolean;
+}
+
 export interface Interaction {
   id: string;
   userId: string;
@@ -40,6 +51,7 @@ export interface Interaction {
   notes?: string;
   sentiment: Sentiment;
   keyTopics: string[];
+  actionItems?: ActionItem[];
   followUpDate?: string;
   followUpNotes?: string;
   createdAt: string;

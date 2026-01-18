@@ -30,14 +30,18 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const login = async (email: string, password: string): Promise<string | null> => {
-    const res = await auth.login(email, password);
-    if (res.success && res.data) {
-      const newAuth = { user: res.data.user, token: res.data.token };
-      setAuthState(newAuth);
-      localStorage.setItem('obani_auth', JSON.stringify(newAuth));
-      return null;
+    try {
+      const res = await auth.login(email, password);
+      if (res.success && res.data) {
+        const newAuth = { user: res.data.user, token: res.data.token };
+        setAuthState(newAuth);
+        localStorage.setItem('obani_auth', JSON.stringify(newAuth));
+        return null;
+      }
+      return res.error || 'Login failed';
+    } catch (err) {
+      return 'Connection error';
     }
-    return res.error || 'Login failed';
   };
 
   const register = async (email: string, password: string, name: string): Promise<string | null> => {
@@ -100,7 +104,7 @@ function AppLayout({ children }: { children: React.ReactNode }) {
 
 // Login Page
 function LoginPage() {
-  const { login, register } = useAuth();
+  const { auth: authState, login, register } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -108,15 +112,27 @@ function LoginPage() {
   const [isRegister, setIsRegister] = useState(false);
   const [name, setName] = useState('');
 
+  // Redirect if already logged in
+  if (authState.token) {
+    return <Navigate to="/contacts" replace />;
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (loading) return;
+    if (!email || !password) {
+      setError('Please enter email and password');
+      return;
+    }
     setError('');
     setLoading(true);
     try {
       const err = isRegister
         ? await register(email, password, name)
         : await login(email, password);
-      if (err) setError(err);
+      if (err) {
+        setError(err);
+      }
     } catch (err) {
       setError('Network error. Please try again.');
     }
@@ -183,6 +199,10 @@ function ContactsPage() {
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
   const [sortBy, setSortBy] = useState<'name' | 'recent' | 'strength'>('name');
+  const [showFilters, setShowFilters] = useState(false);
+  const [minStrength, setMinStrength] = useState(0);
+  const [sectorFilter, setSectorFilter] = useState('');
+  const [lastContactFilter, setLastContactFilter] = useState<'' | '30' | '60' | '90' | '90+'>('');
 
   useEffect(() => {
     loadContacts();
@@ -199,14 +219,47 @@ function ContactsPage() {
     setLoading(false);
   };
 
+  // Get unique sectors from contacts
+  const allSectors = [...new Set(contactList.flatMap(c => c.sectors || []))].sort();
+
   const filteredContacts = contactList
     .filter(c => {
-      if (!search) return true;
-      const q = search.toLowerCase();
-      return c.firstName.toLowerCase().includes(q) ||
-        c.lastName?.toLowerCase().includes(q) ||
-        c.email?.toLowerCase().includes(q) ||
-        c.company?.toLowerCase().includes(q);
+      // Text search
+      if (search) {
+        const q = search.toLowerCase();
+        const matchesSearch = c.firstName.toLowerCase().includes(q) ||
+          c.lastName?.toLowerCase().includes(q) ||
+          c.email?.toLowerCase().includes(q) ||
+          c.company?.toLowerCase().includes(q) ||
+          c.tags?.some(t => t.toLowerCase().includes(q)) ||
+          c.notes?.toLowerCase().includes(q);
+        if (!matchesSearch) return false;
+      }
+
+      // Strength filter
+      if (minStrength > 0 && (c.relationshipStrength || 0) < minStrength) {
+        return false;
+      }
+
+      // Sector filter
+      if (sectorFilter && !c.sectors?.includes(sectorFilter)) {
+        return false;
+      }
+
+      // Last contact filter
+      if (lastContactFilter) {
+        const lastContact = c.lastContactedAt ? new Date(c.lastContactedAt) : null;
+        const daysSinceContact = lastContact
+          ? Math.floor((Date.now() - lastContact.getTime()) / (1000 * 60 * 60 * 24))
+          : 999;
+
+        if (lastContactFilter === '30' && daysSinceContact > 30) return false;
+        if (lastContactFilter === '60' && daysSinceContact > 60) return false;
+        if (lastContactFilter === '90' && daysSinceContact > 90) return false;
+        if (lastContactFilter === '90+' && daysSinceContact <= 90) return false;
+      }
+
+      return true;
     })
     .sort((a, b) => {
       if (sortBy === 'recent') {
@@ -218,6 +271,72 @@ function ContactsPage() {
       return `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`);
     });
 
+  const activeFilterCount = [minStrength > 0, sectorFilter, lastContactFilter].filter(Boolean).length;
+
+  const exportToCSV = () => {
+    const headers = ['First Name', 'Last Name', 'Email', 'Phone', 'Company', 'Title', 'Location', 'Sectors', 'Tags', 'Needs', 'Offers', 'How We Met', 'Relationship Strength', 'Investment Min', 'Investment Max', 'Notes'];
+    const rows = filteredContacts.map(c => [
+      c.firstName,
+      c.lastName || '',
+      c.email || '',
+      c.phone || '',
+      c.company || '',
+      c.title || '',
+      c.location || '',
+      c.sectors?.join('; ') || '',
+      c.tags?.join('; ') || '',
+      c.needs?.join('; ') || '',
+      c.offers?.join('; ') || '',
+      c.howWeMet || '',
+      c.relationshipStrength?.toString() || '',
+      c.investmentTicketMin?.toString() || '',
+      c.investmentTicketMax?.toString() || '',
+      c.notes?.replace(/\n/g, ' ') || ''
+    ].map(val => `"${val.replace(/"/g, '""')}"`).join(','));
+
+    const csv = [headers.join(','), ...rows].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `contacts-${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const exportToJSON = () => {
+    const data = filteredContacts.map(c => ({
+      firstName: c.firstName,
+      lastName: c.lastName,
+      email: c.email,
+      phone: c.phone,
+      company: c.company,
+      title: c.title,
+      location: c.location,
+      sectors: c.sectors,
+      tags: c.tags,
+      needs: c.needs,
+      offers: c.offers,
+      howWeMet: c.howWeMet,
+      relationshipStrength: c.relationshipStrength,
+      investmentTicketMin: c.investmentTicketMin,
+      investmentTicketMax: c.investmentTicketMax,
+      linkedinUrl: c.linkedinUrl,
+      notes: c.notes,
+      lastContactedAt: c.lastContactedAt,
+      createdAt: c.createdAt
+    }));
+
+    const json = JSON.stringify(data, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `contacts-${new Date().toISOString().split('T')[0]}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   if (loading) {
     return <div className="page-loading">Loading contacts...</div>;
   }
@@ -226,17 +345,32 @@ function ContactsPage() {
     <div className="contacts-page">
       <div className="page-header">
         <h1>Contacts</h1>
-        <Link to="/contacts/new" className="btn primary">+ Add Contact</Link>
+        <div className="header-actions">
+          <div className="export-dropdown">
+            <button className="btn secondary">Export ▾</button>
+            <div className="export-menu">
+              <button onClick={exportToCSV}>Export as CSV</button>
+              <button onClick={exportToJSON}>Export as JSON</button>
+            </div>
+          </div>
+          <Link to="/contacts/new" className="btn primary">+ Add Contact</Link>
+        </div>
       </div>
 
       <div className="filters-bar">
         <input
           type="text"
           className="search-input"
-          placeholder="Search contacts..."
+          placeholder="Search contacts, tags, notes..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
+        <button
+          className={`filter-toggle-btn ${activeFilterCount > 0 ? 'active' : ''}`}
+          onClick={() => setShowFilters(!showFilters)}
+        >
+          Filters {activeFilterCount > 0 && <span className="filter-badge">{activeFilterCount}</span>}
+        </button>
         <div className="sort-options">
           <span>Sort:</span>
           {(['name', 'recent', 'strength'] as const).map(opt => (
@@ -250,6 +384,74 @@ function ContactsPage() {
           ))}
         </div>
       </div>
+
+      {showFilters && (
+        <div className="filter-panel">
+          <div className="filter-group">
+            <label>Min Strength</label>
+            <div className="strength-filter">
+              {[0, 1, 2, 3, 4, 5].map(n => (
+                <button
+                  key={n}
+                  className={`strength-filter-btn ${minStrength === n ? 'active' : ''}`}
+                  onClick={() => setMinStrength(n)}
+                >
+                  {n === 0 ? 'Any' : `${n}+`}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {allSectors.length > 0 && (
+            <div className="filter-group">
+              <label>Sector</label>
+              <select
+                value={sectorFilter}
+                onChange={(e) => setSectorFilter(e.target.value)}
+              >
+                <option value="">All Sectors</option>
+                {allSectors.map(s => (
+                  <option key={s} value={s}>{s}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          <div className="filter-group">
+            <label>Last Contact</label>
+            <div className="contact-filter">
+              {[
+                { val: '', label: 'Any' },
+                { val: '30', label: '< 30 days' },
+                { val: '60', label: '< 60 days' },
+                { val: '90', label: '< 90 days' },
+                { val: '90+', label: '90+ days (At Risk)' },
+              ].map(opt => (
+                <button
+                  key={opt.val}
+                  className={`contact-filter-btn ${lastContactFilter === opt.val ? 'active' : ''}`}
+                  onClick={() => setLastContactFilter(opt.val as typeof lastContactFilter)}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {activeFilterCount > 0 && (
+            <button
+              className="clear-filters-btn"
+              onClick={() => {
+                setMinStrength(0);
+                setSectorFilter('');
+                setLastContactFilter('');
+              }}
+            >
+              Clear All Filters
+            </button>
+          )}
+        </div>
+      )}
 
       <p className="results-count">{filteredContacts.length} contacts</p>
 
@@ -419,6 +621,55 @@ function ContactDetailPage() {
           </section>
         )}
 
+        {contact.howWeMet && (
+          <section className="detail-section">
+            <h2>How We Met</h2>
+            <p className="notes-text">{contact.howWeMet}</p>
+          </section>
+        )}
+
+        {(contact.needs?.length > 0 || contact.offers?.length > 0) && (
+          <section className="detail-section">
+            <h2>Value Exchange</h2>
+            {contact.needs?.length > 0 && (
+              <div className="value-exchange-row">
+                <span className="value-label">🎯 What They Need:</span>
+                <div className="tags-list">
+                  {contact.needs.map(n => <span key={n} className="tag need">{n}</span>)}
+                </div>
+              </div>
+            )}
+            {contact.offers?.length > 0 && (
+              <div className="value-exchange-row">
+                <span className="value-label">💡 What They Offer:</span>
+                <div className="tags-list">
+                  {contact.offers.map(o => <span key={o} className="tag offer">{o}</span>)}
+                </div>
+              </div>
+            )}
+          </section>
+        )}
+
+        {(contact.investmentTicketMin || contact.investmentTicketMax) && (
+          <section className="detail-section">
+            <h2>Investment Criteria</h2>
+            <div className="info-grid">
+              {contact.investmentTicketMin && (
+                <div className="info-row">
+                  <span>Min Ticket</span>
+                  <span>£{contact.investmentTicketMin.toLocaleString()}</span>
+                </div>
+              )}
+              {contact.investmentTicketMax && (
+                <div className="info-row">
+                  <span>Max Ticket</span>
+                  <span>£{contact.investmentTicketMax.toLocaleString()}</span>
+                </div>
+              )}
+            </div>
+          </section>
+        )}
+
         {contact.notes && (
           <section className="detail-section">
             <h2>Notes</h2>
@@ -447,6 +698,16 @@ function ContactDetailPage() {
                     <span className="int-date">{formatDate(int.date)}</span>
                   </div>
                   {int.notes && <p className="int-notes">{int.notes}</p>}
+                  {int.actionItems && int.actionItems.length > 0 && (
+                    <div className="int-action-items">
+                      {int.actionItems.map(action => (
+                        <div key={action.id} className={`int-action ${action.completed ? 'completed' : ''}`}>
+                          <span className="action-icon">{action.owner === 'me' ? '👤' : action.owner === 'them' ? '👥' : '🤝'}</span>
+                          <span className="action-label">{action.text}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -492,6 +753,12 @@ function ContactFormPage() {
     location: '',
     notes: '',
     tags: '',
+    sectors: '',
+    needs: '',
+    offers: '',
+    howWeMet: '',
+    investmentTicketMin: '',
+    investmentTicketMax: '',
     relationshipStrength: 3,
     linkedinUrl: '',
   });
@@ -511,6 +778,12 @@ function ContactFormPage() {
             location: c.location || '',
             notes: c.notes || '',
             tags: c.tags?.join(', ') || '',
+            sectors: c.sectors?.join(', ') || '',
+            needs: c.needs?.join(', ') || '',
+            offers: c.offers?.join(', ') || '',
+            howWeMet: c.howWeMet || '',
+            investmentTicketMin: c.investmentTicketMin?.toString() || '',
+            investmentTicketMax: c.investmentTicketMax?.toString() || '',
             relationshipStrength: c.relationshipStrength || 3,
             linkedinUrl: c.linkedinUrl || '',
           });
@@ -535,6 +808,12 @@ function ContactFormPage() {
       location: form.location || undefined,
       notes: form.notes || undefined,
       tags: form.tags ? form.tags.split(',').map(t => t.trim()).filter(Boolean) : [],
+      sectors: form.sectors ? form.sectors.split(',').map(t => t.trim()).filter(Boolean) : [],
+      needs: form.needs ? form.needs.split(',').map(t => t.trim()).filter(Boolean) : [],
+      offers: form.offers ? form.offers.split(',').map(t => t.trim()).filter(Boolean) : [],
+      howWeMet: form.howWeMet || undefined,
+      investmentTicketMin: form.investmentTicketMin ? parseInt(form.investmentTicketMin) : undefined,
+      investmentTicketMax: form.investmentTicketMax ? parseInt(form.investmentTicketMax) : undefined,
       relationshipStrength: form.relationshipStrength,
       linkedinUrl: form.linkedinUrl || undefined,
     };
@@ -633,6 +912,16 @@ function ContactFormPage() {
         </div>
 
         <div className="form-group">
+          <label>How We Met</label>
+          <input
+            type="text"
+            value={form.howWeMet}
+            onChange={e => setForm({...form, howWeMet: e.target.value})}
+            placeholder="Conference, mutual friend, cold outreach..."
+          />
+        </div>
+
+        <div className="form-group">
           <label>LinkedIn URL</label>
           <input
             type="url"
@@ -643,13 +932,64 @@ function ContactFormPage() {
         </div>
 
         <div className="form-group">
+          <label>Sector (comma separated)</label>
+          <input
+            type="text"
+            value={form.sectors}
+            onChange={e => setForm({...form, sectors: e.target.value})}
+            placeholder="VC, Fintech, AI, SaaS"
+          />
+        </div>
+
+        <div className="form-group">
           <label>Tags (comma separated)</label>
           <input
             type="text"
             value={form.tags}
             onChange={e => setForm({...form, tags: e.target.value})}
-            placeholder="investor, tech, NYC"
+            placeholder="investor, advisor, NYC"
           />
+        </div>
+
+        <div className="form-group">
+          <label>What They Need (comma separated)</label>
+          <input
+            type="text"
+            value={form.needs}
+            onChange={e => setForm({...form, needs: e.target.value})}
+            placeholder="funding, introductions, talent"
+          />
+        </div>
+
+        <div className="form-group">
+          <label>What They Offer (comma separated)</label>
+          <input
+            type="text"
+            value={form.offers}
+            onChange={e => setForm({...form, offers: e.target.value})}
+            placeholder="capital, advice, connections"
+          />
+        </div>
+
+        <div className="form-row">
+          <div className="form-group">
+            <label>Investment Min (£)</label>
+            <input
+              type="number"
+              value={form.investmentTicketMin}
+              onChange={e => setForm({...form, investmentTicketMin: e.target.value})}
+              placeholder="100000"
+            />
+          </div>
+          <div className="form-group">
+            <label>Investment Max (£)</label>
+            <input
+              type="number"
+              value={form.investmentTicketMax}
+              onChange={e => setForm({...form, investmentTicketMax: e.target.value})}
+              placeholder="5000000"
+            />
+          </div>
         </div>
 
         <div className="form-group">
@@ -708,6 +1048,20 @@ function InteractionModal({
   const [sentiment, setSentiment] = useState<Sentiment>('NEUTRAL');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [actionItems, setActionItems] = useState<{text: string; owner: 'me' | 'them' | 'both'}[]>([]);
+  const [newAction, setNewAction] = useState('');
+  const [newActionOwner, setNewActionOwner] = useState<'me' | 'them' | 'both'>('me');
+
+  const addActionItem = () => {
+    if (newAction.trim()) {
+      setActionItems([...actionItems, { text: newAction.trim(), owner: newActionOwner }]);
+      setNewAction('');
+    }
+  };
+
+  const removeActionItem = (idx: number) => {
+    setActionItems(actionItems.filter((_, i) => i !== idx));
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -720,6 +1074,12 @@ function InteractionModal({
       notes: notes || undefined,
       sentiment,
       keyTopics: [],
+      actionItems: actionItems.length > 0 ? actionItems.map((a, i) => ({
+        id: `temp-${i}`,
+        text: a.text,
+        owner: a.owner,
+        completed: false
+      })) : undefined,
     });
     setSaving(false);
     if (res.success && res.data) {
@@ -788,6 +1148,38 @@ function InteractionModal({
               rows={3}
               placeholder="What did you discuss?"
             />
+          </div>
+
+          <div className="form-group">
+            <label>Action Items</label>
+            {actionItems.length > 0 && (
+              <ul className="action-items-list">
+                {actionItems.map((item, idx) => (
+                  <li key={idx} className="action-item">
+                    <span className={`action-owner ${item.owner}`}>
+                      {item.owner === 'me' ? '👤' : item.owner === 'them' ? '👥' : '🤝'}
+                    </span>
+                    <span className="action-text">{item.text}</span>
+                    <button type="button" className="remove-action" onClick={() => removeActionItem(idx)}>×</button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <div className="add-action-row">
+              <input
+                type="text"
+                value={newAction}
+                onChange={e => setNewAction(e.target.value)}
+                placeholder="Add an action item..."
+                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addActionItem(); }}}
+              />
+              <select value={newActionOwner} onChange={e => setNewActionOwner(e.target.value as 'me' | 'them' | 'both')}>
+                <option value="me">Me</option>
+                <option value="them">Them</option>
+                <option value="both">Both</option>
+              </select>
+              <button type="button" className="btn-add-action" onClick={addActionItem}>+</button>
+            </div>
           </div>
 
           <div className="modal-actions">
@@ -881,6 +1273,15 @@ function InteractionsPage() {
                       <span className={`sentiment-dot ${int.sentiment.toLowerCase()}`}></span>
                     </div>
                     {int.notes && <p className="activity-notes">{int.notes}</p>}
+                    {int.actionItems && int.actionItems.length > 0 && (
+                      <div className="activity-actions">
+                        {int.actionItems.map(a => (
+                          <span key={a.id} className={`activity-action-tag ${a.completed ? 'done' : ''}`}>
+                            {a.owner === 'me' ? '👤' : a.owner === 'them' ? '👥' : '🤝'} {a.text}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </div>
                   <span className="activity-time">
                     {new Date(int.date).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
