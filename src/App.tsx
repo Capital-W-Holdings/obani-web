@@ -248,6 +248,24 @@ function getRecentlyViewed(): RecentlyViewedEntry[] {
   return stored ? JSON.parse(stored) : [];
 }
 
+// Local storage helpers for reminders (fallback when API fails)
+function getLocalReminders(): Record<string, string> {
+  const stored = localStorage.getItem('obani_reminders');
+  return stored ? JSON.parse(stored) : {};
+}
+
+function saveLocalReminder(contactId: string, dateTime: string) {
+  const reminders = getLocalReminders();
+  reminders[contactId] = dateTime;
+  localStorage.setItem('obani_reminders', JSON.stringify(reminders));
+}
+
+function clearLocalReminder(contactId: string) {
+  const reminders = getLocalReminders();
+  delete reminders[contactId];
+  localStorage.setItem('obani_reminders', JSON.stringify(reminders));
+}
+
 // Global Search Component
 function GlobalSearch() {
   const [query, setQuery] = useState('');
@@ -2942,24 +2960,6 @@ function ContactDetailPage() {
     if (res.success && res.data) {
       setAllContacts(res.data);
     }
-  };
-
-  // Local storage helpers for reminders (fallback when API fails)
-  const getLocalReminders = (): Record<string, string> => {
-    const stored = localStorage.getItem('obani_reminders');
-    return stored ? JSON.parse(stored) : {};
-  };
-
-  const saveLocalReminder = (contactId: string, dateTime: string) => {
-    const reminders = getLocalReminders();
-    reminders[contactId] = dateTime;
-    localStorage.setItem('obani_reminders', JSON.stringify(reminders));
-  };
-
-  const clearLocalReminder = (contactId: string) => {
-    const reminders = getLocalReminders();
-    delete reminders[contactId];
-    localStorage.setItem('obani_reminders', JSON.stringify(reminders));
   };
 
   const loadContact = async (contactId: string) => {
@@ -8882,11 +8882,225 @@ function DashboardPage() {
   const recommendations = getRecommendations();
   const networkInsights = getNetworkInsights();
 
+  // Daily Digest Data
+  const getTodayDigest = () => {
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    // Get greeting based on time
+    const hour = now.getHours();
+    let greeting = 'Good morning';
+    if (hour >= 12 && hour < 17) greeting = 'Good afternoon';
+    else if (hour >= 17) greeting = 'Good evening';
+
+    // Follow-ups due today (from scheduled reminders + localStorage)
+    const localReminders = getLocalReminders();
+    const followUpsDueToday = contactList.filter(c => {
+      // Check nextFollowUpAt from contact
+      if (c.nextFollowUpAt) {
+        const followUpDate = new Date(c.nextFollowUpAt);
+        return followUpDate >= today && followUpDate < tomorrow;
+      }
+      // Check localStorage reminders
+      const localReminder = localReminders[c.id];
+      if (localReminder) {
+        const reminderDate = new Date(localReminder);
+        return reminderDate >= today && reminderDate < tomorrow;
+      }
+      return false;
+    });
+
+    // Overdue follow-ups
+    const overdueFollowUps = contactList.filter(c => {
+      if (c.nextFollowUpAt) {
+        return new Date(c.nextFollowUpAt) < today;
+      }
+      const localReminder = localReminders[c.id];
+      if (localReminder) {
+        return new Date(localReminder) < today;
+      }
+      return false;
+    });
+
+    // Decaying relationships (strength dropped 2+ from original)
+    const decayingRelationships = contactList.filter(c => {
+      if (c.isArchived) return false;
+      const strength = getEffectiveStrength(c);
+      return strength.decayed && (strength.original - strength.current) >= 2;
+    }).slice(0, 3);
+
+    // Potential intro matches (contacts with complementary needs/offers)
+    const introSuggestions: { source: Contact; target: Contact; reason: string }[] = [];
+    const activeContacts = contactList.filter(c => !c.isArchived && c.relationshipStrength >= 3);
+
+    activeContacts.forEach(source => {
+      if (introSuggestions.length >= 3) return;
+      activeContacts.forEach(target => {
+        if (introSuggestions.length >= 3) return;
+        if (source.id === target.id) return;
+        // Already matched this pair?
+        if (introSuggestions.some(s =>
+          (s.source.id === source.id && s.target.id === target.id) ||
+          (s.source.id === target.id && s.target.id === source.id)
+        )) return;
+
+        // Check needs/offers match
+        const sourceNeeds = source.needs || [];
+        const targetOffers = target.offers || [];
+        const matchingOffers = sourceNeeds.filter(n =>
+          targetOffers.some(o => o.toLowerCase().includes(n.toLowerCase()) || n.toLowerCase().includes(o.toLowerCase()))
+        );
+
+        if (matchingOffers.length > 0) {
+          introSuggestions.push({
+            source,
+            target,
+            reason: `${source.firstName} needs "${matchingOffers[0]}" - ${target.firstName} offers this`
+          });
+        }
+
+        // Check sector alignment
+        const sourceSectors = source.sectors || [];
+        const targetSectors = target.sectors || [];
+        const sharedSectors = sourceSectors.filter(s => targetSectors.includes(s));
+
+        if (sharedSectors.length > 0 && !introSuggestions.some(s => s.source.id === source.id && s.target.id === target.id)) {
+          const alreadyKnow = interactionList.some(i =>
+            (i.contactId === source.id && i.notes?.toLowerCase().includes(target.firstName.toLowerCase())) ||
+            (i.contactId === target.id && i.notes?.toLowerCase().includes(source.firstName.toLowerCase()))
+          );
+          if (!alreadyKnow && introSuggestions.length < 3) {
+            introSuggestions.push({
+              source,
+              target,
+              reason: `Both in ${sharedSectors[0]} sector`
+            });
+          }
+        }
+      });
+    });
+
+    return {
+      greeting,
+      followUpsDueToday,
+      overdueFollowUps,
+      decayingRelationships,
+      introSuggestions,
+      totalAlerts: followUpsDueToday.length + overdueFollowUps.length + decayingRelationships.length
+    };
+  };
+
+  const digest = getTodayDigest();
+
   return (
     <div className="dashboard-page">
       <div className="page-header">
         <h1>Follow-Ups</h1>
         <p className="page-subtitle">Keep your relationships warm</p>
+      </div>
+
+      {/* Daily Digest */}
+      <div className="daily-digest">
+        <div className="digest-header">
+          <div className="digest-greeting">
+            <h2>{digest.greeting}</h2>
+            <p className="digest-date">{new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</p>
+          </div>
+          {digest.totalAlerts > 0 && (
+            <div className="digest-alert-badge">{digest.totalAlerts}</div>
+          )}
+        </div>
+
+        {(digest.followUpsDueToday.length > 0 || digest.overdueFollowUps.length > 0) && (
+          <div className="digest-section">
+            <div className="digest-section-header">
+              <span className="digest-icon">📅</span>
+              <h3>Today's Follow-Ups</h3>
+            </div>
+            <div className="digest-items">
+              {digest.overdueFollowUps.slice(0, 2).map(contact => (
+                <Link key={contact.id} to={`/contacts/${contact.id}`} className="digest-item overdue">
+                  <div className="digest-item-avatar">{contact.firstName[0]}</div>
+                  <div className="digest-item-info">
+                    <span className="digest-item-name">{contact.firstName} {contact.lastName || ''}</span>
+                    <span className="digest-item-meta">Overdue</span>
+                  </div>
+                  <span className="digest-item-badge overdue">!</span>
+                </Link>
+              ))}
+              {digest.followUpsDueToday.slice(0, 3).map(contact => (
+                <Link key={contact.id} to={`/contacts/${contact.id}`} className="digest-item">
+                  <div className="digest-item-avatar">{contact.firstName[0]}</div>
+                  <div className="digest-item-info">
+                    <span className="digest-item-name">{contact.firstName} {contact.lastName || ''}</span>
+                    <span className="digest-item-meta">{contact.company || 'Schedule today'}</span>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {digest.decayingRelationships.length > 0 && (
+          <div className="digest-section">
+            <div className="digest-section-header">
+              <span className="digest-icon">📉</span>
+              <h3>Relationships Cooling</h3>
+            </div>
+            <div className="digest-items">
+              {digest.decayingRelationships.map(contact => {
+                const strength = getEffectiveStrength(contact);
+                return (
+                  <Link key={contact.id} to={`/contacts/${contact.id}`} className="digest-item decay">
+                    <div className="digest-item-avatar">{contact.firstName[0]}</div>
+                    <div className="digest-item-info">
+                      <span className="digest-item-name">{contact.firstName} {contact.lastName || ''}</span>
+                      <span className="digest-item-meta">
+                        Strength: {strength.original} → {strength.current}
+                      </span>
+                    </div>
+                    <span className="digest-item-badge decay">↓{strength.original - strength.current}</span>
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {digest.introSuggestions.length > 0 && (
+          <div className="digest-section">
+            <div className="digest-section-header">
+              <span className="digest-icon">🤝</span>
+              <h3>Introduction Ideas</h3>
+            </div>
+            <div className="digest-items">
+              {digest.introSuggestions.map((suggestion, idx) => (
+                <div key={idx} className="digest-intro-item">
+                  <div className="digest-intro-avatars">
+                    <div className="digest-item-avatar">{suggestion.source.firstName[0]}</div>
+                    <span className="intro-arrow">↔</span>
+                    <div className="digest-item-avatar">{suggestion.target.firstName[0]}</div>
+                  </div>
+                  <div className="digest-item-info">
+                    <span className="digest-item-name">
+                      {suggestion.source.firstName} & {suggestion.target.firstName}
+                    </span>
+                    <span className="digest-item-meta">{suggestion.reason}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {digest.totalAlerts === 0 && digest.introSuggestions.length === 0 && (
+          <div className="digest-empty">
+            <span className="digest-empty-icon">✨</span>
+            <p>All caught up! Your network is in great shape.</p>
+          </div>
+        )}
       </div>
 
       <div className="dashboard-summary">
