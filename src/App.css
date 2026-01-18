@@ -2462,3 +2462,45 @@ label {
   color: #A0AEC0;
   margin-top: 6px;
 }
+
+/* Relationship Strength Decay */
+.strength-stars.decayed {
+  color: #E53E3E;
+}
+
+.decay-indicator {
+  font-size: 10px;
+  color: #E53E3E;
+  margin-left: 4px;
+  font-weight: 600;
+}
+
+.decay-warning {
+  margin-top: 8px;
+}
+
+.decay-text {
+  font-size: 13px;
+  color: #C53030;
+  background: #FED7D7;
+  padding: 6px 12px;
+  border-radius: 6px;
+}
+
+.strength-decay-badge {
+  font-size: 10px;
+  color: white;
+  background: #E53E3E;
+  padding: 2px 5px;
+  border-radius: 10px;
+  margin-left: 6px;
+  font-weight: 600;
+}
+
+.followup-strength.decayed {
+  position: relative;
+}
+
+.strength-display .strength-stars.large.decayed {
+  color: #C53030;
+}

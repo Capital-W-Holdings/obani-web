@@ -4,6 +4,20 @@ import { auth, contacts, interactions, introductions, analytics } from './servic
 import type { Contact, Interaction, Introduction, AnalyticsDashboard, AuthState, InteractionType, Sentiment } from './types';
 import './App.css';
 
+// Relationship Strength Decay Helper
+// Strength decays by 1 point per 30 days without contact, minimum of 1
+function getEffectiveStrength(contact: Contact): { current: number; original: number; decayed: boolean } {
+  const original = contact.relationshipStrength || 1;
+  if (!contact.lastContactedAt) {
+    return { current: Math.max(1, original - 3), original, decayed: true }; // Assume 90+ days if never contacted
+  }
+  const lastContact = new Date(contact.lastContactedAt);
+  const daysSinceContact = Math.floor((Date.now() - lastContact.getTime()) / (1000 * 60 * 60 * 24));
+  const decayAmount = Math.floor(daysSinceContact / 30); // 1 point per 30 days
+  const current = Math.max(1, original - decayAmount);
+  return { current, original, decayed: current < original };
+}
+
 // Auth Context
 const AuthContext = createContext<{
   auth: AuthState;
@@ -560,10 +574,16 @@ function ContactsPage() {
                 )}
               </div>
               <div className="contact-meta">
-                <div className="strength-stars">
-                  {'★'.repeat(contact.relationshipStrength || 0)}
-                  {'☆'.repeat(5 - (contact.relationshipStrength || 0))}
-                </div>
+                {(() => {
+                  const strength = getEffectiveStrength(contact);
+                  return (
+                    <div className={`strength-stars ${strength.decayed ? 'decayed' : ''}`} title={strength.decayed ? `Was ${strength.original}, now ${strength.current} (decay)` : ''}>
+                      {'★'.repeat(strength.current)}
+                      {'☆'.repeat(5 - strength.current)}
+                      {strength.decayed && <span className="decay-indicator">↓</span>}
+                    </div>
+                  );
+                })()}
                 {contact.tags?.slice(0, 2).map(tag => (
                   <span key={tag} className="tag">{tag}</span>
                 ))}
@@ -683,13 +703,26 @@ function ContactDetailPage() {
         {contact.title && contact.company && (
           <p className="hero-subtitle">{contact.title} at {contact.company}</p>
         )}
-        <div className="strength-display">
-          <span className="strength-label">Relationship Strength</span>
-          <span className="strength-stars large">
-            {'★'.repeat(contact.relationshipStrength || 0)}
-            {'☆'.repeat(5 - (contact.relationshipStrength || 0))}
-          </span>
-        </div>
+        {(() => {
+          const strength = getEffectiveStrength(contact);
+          return (
+            <div className="strength-display">
+              <span className="strength-label">Relationship Strength</span>
+              <div className={`strength-stars large ${strength.decayed ? 'decayed' : ''}`}>
+                {'★'.repeat(strength.current)}
+                {'☆'.repeat(5 - strength.current)}
+                {strength.decayed && <span className="decay-indicator">↓</span>}
+              </div>
+              {strength.decayed && (
+                <div className="decay-warning">
+                  <span className="decay-text">
+                    Was {strength.original}★ — reach out to restore!
+                  </span>
+                </div>
+              )}
+            </div>
+          );
+        })()}
       </div>
 
       <div className="quick-actions">
@@ -1988,9 +2021,15 @@ function DashboardPage() {
                   <span className="followup-company">{contact.company || 'No company'}</span>
                   <span className="followup-days">{getDaysSinceContact(contact)} days ago</span>
                 </div>
-                <div className="followup-strength">
-                  {'❤️'.repeat(contact.relationshipStrength)}
-                </div>
+                {(() => {
+                  const strength = getEffectiveStrength(contact);
+                  return (
+                    <div className={`followup-strength ${strength.decayed ? 'decayed' : ''}`} title={strength.decayed ? `Was ${strength.original}` : ''}>
+                      {'❤️'.repeat(strength.current)}
+                      {strength.decayed && <span className="strength-decay-badge">↓{strength.original - strength.current}</span>}
+                    </div>
+                  );
+                })()}
                 <div className="followup-actions">
                   {contact.email && (
                     <a href={`mailto:${contact.email}`} className="action-btn email" title="Email">✉️</a>
@@ -2025,9 +2064,15 @@ function DashboardPage() {
                   <span className="followup-company">{contact.company || 'No company'}</span>
                   <span className="followup-days">{getDaysSinceContact(contact)} days ago</span>
                 </div>
-                <div className="followup-strength">
-                  {'❤️'.repeat(contact.relationshipStrength)}
-                </div>
+                {(() => {
+                  const strength = getEffectiveStrength(contact);
+                  return (
+                    <div className={`followup-strength ${strength.decayed ? 'decayed' : ''}`} title={strength.decayed ? `Was ${strength.original}` : ''}>
+                      {'❤️'.repeat(strength.current)}
+                      {strength.decayed && <span className="strength-decay-badge">↓{strength.original - strength.current}</span>}
+                    </div>
+                  );
+                })()}
                 <div className="followup-actions">
                   {contact.email && (
                     <a href={`mailto:${contact.email}`} className="action-btn email" title="Email">✉️</a>
