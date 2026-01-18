@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import './App.css';
 
-const API_URL = 'https://obani.vercel.app/api';
+const API_URL = 'https://obani-api-new.vercel.app/api';
 
 interface User {
   id: string;
