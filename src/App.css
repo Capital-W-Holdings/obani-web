@@ -2504,3 +2504,268 @@ label {
 .strength-display .strength-stars.large.decayed {
   color: #C53030;
 }
+
+/* Enhanced Search */
+.search-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+}
+
+.search-notes-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #718096;
+  cursor: pointer;
+}
+
+.search-notes-toggle input {
+  margin: 0;
+  cursor: pointer;
+}
+
+.search-notes-toggle span {
+  user-select: none;
+}
+
+.search-matches {
+  margin-top: 6px;
+}
+
+.search-match {
+  font-size: 12px;
+  color: #718096;
+  font-style: italic;
+  padding: 4px 0;
+  line-height: 1.4;
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.match-icon {
+  flex-shrink: 0;
+  font-size: 10px;
+}
+
+.contact-card:has(.search-matches) {
+  align-items: flex-start;
+}
+
+.contact-card:has(.search-matches) .contact-info {
+  flex: 1;
+}
+
+/* Reminder Card */
+.reminder-card {
+  background: linear-gradient(135deg, #FFFFF0 0%, #FEFCE8 100%);
+  border: 1px solid #FDE68A;
+  border-radius: 12px;
+  padding: 16px 20px;
+  margin-bottom: 16px;
+}
+
+.reminder-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.reminder-icon {
+  font-size: 18px;
+}
+
+.reminder-header h3 {
+  font-size: 15px;
+  font-weight: 600;
+  color: #92400E;
+  margin: 0;
+}
+
+.reminder-set {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.reminder-date {
+  font-size: 15px;
+  font-weight: 500;
+  color: #78350F;
+}
+
+.reminder-date.overdue {
+  color: #DC2626;
+}
+
+.reminder-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.btn-reminder-edit,
+.btn-reminder-clear {
+  padding: 6px 12px;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.btn-reminder-edit {
+  background: #FEF3C7;
+  color: #92400E;
+}
+
+.btn-reminder-edit:hover {
+  background: #FDE68A;
+}
+
+.btn-reminder-clear {
+  background: none;
+  color: #9CA3AF;
+}
+
+.btn-reminder-clear:hover {
+  color: #DC2626;
+}
+
+.reminder-edit {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.reminder-edit input {
+  padding: 8px 12px;
+  border: 1px solid #FDE68A;
+  border-radius: 6px;
+  font-size: 14px;
+  font-family: inherit;
+}
+
+.btn-reminder-save {
+  padding: 8px 14px;
+  background: #F59E0B;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.btn-reminder-save:hover {
+  background: #D97706;
+}
+
+.btn-reminder-cancel {
+  padding: 8px 12px;
+  background: none;
+  border: 1px solid #E5E7EB;
+  border-radius: 6px;
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+  color: #6B7280;
+}
+
+.btn-set-reminder {
+  width: 100%;
+  padding: 10px;
+  background: none;
+  border: 1px dashed #FDE68A;
+  border-radius: 8px;
+  font-size: 14px;
+  font-family: inherit;
+  color: #92400E;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-set-reminder:hover {
+  background: #FEF3C7;
+  border-style: solid;
+}
+
+/* Dashboard Reminders */
+.summary-stat.reminders {
+  background: linear-gradient(135deg, #FFFBEB 0%, #FEF3C7 100%);
+  border: 1px solid #FDE68A;
+}
+
+.followup-section.reminders-section {
+  border-left: 4px solid #F59E0B;
+}
+
+.reminders-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 10px;
+}
+
+.reminder-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  background: #FFFBEB;
+  border-radius: 8px;
+  text-decoration: none;
+  transition: all 0.2s;
+}
+
+.reminder-item:hover {
+  background: #FEF3C7;
+}
+
+.reminder-item.overdue {
+  background: #FEF2F2;
+  border: 1px solid #FECACA;
+}
+
+.reminder-item-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: #F59E0B;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.reminder-item.overdue .reminder-item-avatar {
+  background: #DC2626;
+}
+
+.reminder-item-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.reminder-item-name {
+  font-weight: 500;
+  color: #1F2937;
+  font-size: 14px;
+}
+
+.reminder-item-date {
+  font-size: 12px;
+  color: #92400E;
+}
+
+.reminder-item.overdue .reminder-item-date {
+  color: #DC2626;
+}

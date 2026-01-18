@@ -217,9 +217,11 @@ interface FilterPreset {
 
 function ContactsPage() {
   const [contactList, setContactList] = useState<Contact[]>([]);
+  const [allInteractions, setAllInteractions] = useState<Interaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
+  const [searchInNotes, setSearchInNotes] = useState(true);
   const [sortBy, setSortBy] = useState<'name' | 'recent' | 'strength'>('name');
   const [showFilters, setShowFilters] = useState(false);
   const [minStrength, setMinStrength] = useState(0);
@@ -230,13 +232,30 @@ function ContactsPage() {
   const [showSavePreset, setShowSavePreset] = useState(false);
 
   useEffect(() => {
-    loadContacts();
+    loadData();
     // Load saved presets from localStorage
     const stored = localStorage.getItem('obani_filter_presets');
     if (stored) {
       setSavedPresets(JSON.parse(stored));
     }
   }, []);
+
+  const loadData = async () => {
+    setLoading(true);
+    const [contactRes, intRes] = await Promise.all([
+      contacts.list(1, 200),
+      interactions.list(1, 500)
+    ]);
+    if (contactRes.success && contactRes.data) {
+      setContactList(contactRes.data.items || []);
+    } else {
+      setError(contactRes.error || 'Failed to load contacts');
+    }
+    if (intRes.success && intRes.data) {
+      setAllInteractions(intRes.data.items || []);
+    }
+    setLoading(false);
+  };
 
   const savePreset = () => {
     if (!newPresetName.trim()) return;
@@ -265,15 +284,21 @@ function ContactsPage() {
     localStorage.setItem('obani_filter_presets', JSON.stringify(updated));
   };
 
-  const loadContacts = async () => {
-    setLoading(true);
-    const res = await contacts.list(1, 200);
-    if (res.success && res.data) {
-      setContactList(res.data.items || []);
-    } else {
-      setError(res.error || 'Failed to load contacts');
-    }
-    setLoading(false);
+  // Get interaction matches for a contact
+  const getInteractionMatches = (contactId: string, query: string): string[] => {
+    if (!searchInNotes) return [];
+    const matches: string[] = [];
+    allInteractions
+      .filter(int => int.contactId === contactId)
+      .forEach(int => {
+        if (int.notes?.toLowerCase().includes(query)) {
+          matches.push(int.notes.substring(0, 80) + (int.notes.length > 80 ? '...' : ''));
+        }
+        if (int.keyTopics?.some(t => t.toLowerCase().includes(query))) {
+          matches.push(`Topics: ${int.keyTopics.join(', ')}`);
+        }
+      });
+    return matches.slice(0, 2); // Limit to 2 matches
   };
 
   // Get unique sectors from contacts
@@ -284,13 +309,25 @@ function ContactsPage() {
       // Text search
       if (search) {
         const q = search.toLowerCase();
-        const matchesSearch = c.firstName.toLowerCase().includes(q) ||
+        const matchesContact = c.firstName.toLowerCase().includes(q) ||
           c.lastName?.toLowerCase().includes(q) ||
           c.email?.toLowerCase().includes(q) ||
           c.company?.toLowerCase().includes(q) ||
           c.tags?.some(t => t.toLowerCase().includes(q)) ||
-          c.notes?.toLowerCase().includes(q);
-        if (!matchesSearch) return false;
+          c.notes?.toLowerCase().includes(q) ||
+          c.needs?.some(n => n.toLowerCase().includes(q)) ||
+          c.offers?.some(o => o.toLowerCase().includes(q)) ||
+          c.howWeMet?.toLowerCase().includes(q);
+
+        // Also search interactions if enabled
+        const matchesInteractions = searchInNotes && allInteractions.some(int =>
+          int.contactId === c.id && (
+            int.notes?.toLowerCase().includes(q) ||
+            int.keyTopics?.some(t => t.toLowerCase().includes(q))
+          )
+        );
+
+        if (!matchesContact && !matchesInteractions) return false;
       }
 
       // Strength filter
@@ -415,13 +452,23 @@ function ContactsPage() {
       </div>
 
       <div className="filters-bar">
-        <input
-          type="text"
-          className="search-input"
-          placeholder="Search contacts, tags, notes..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
+        <div className="search-wrapper">
+          <input
+            type="text"
+            className="search-input"
+            placeholder={searchInNotes ? "Search contacts, notes & interactions..." : "Search contacts..."}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          <label className="search-notes-toggle">
+            <input
+              type="checkbox"
+              checked={searchInNotes}
+              onChange={(e) => setSearchInNotes(e.target.checked)}
+            />
+            <span>Include notes</span>
+          </label>
+        </div>
         <button
           className={`filter-toggle-btn ${activeFilterCount > 0 ? 'active' : ''}`}
           onClick={() => setShowFilters(!showFilters)}
@@ -557,39 +604,51 @@ function ContactsPage() {
         </div>
       ) : (
         <div className="contacts-list">
-          {filteredContacts.map(contact => (
-            <Link key={contact.id} to={`/contacts/${contact.id}`} className="contact-card">
-              <div className="contact-avatar">
-                {contact.firstName[0]}{contact.lastName?.[0] || ''}
-              </div>
-              <div className="contact-info">
-                <div className="contact-name">{contact.firstName} {contact.lastName || ''}</div>
-                {contact.company && (
-                  <div className="contact-company">
-                    {contact.title ? `${contact.title} at ` : ''}{contact.company}
-                  </div>
-                )}
-                {!contact.company && contact.email && (
-                  <div className="contact-email">{contact.email}</div>
-                )}
-              </div>
-              <div className="contact-meta">
-                {(() => {
-                  const strength = getEffectiveStrength(contact);
-                  return (
-                    <div className={`strength-stars ${strength.decayed ? 'decayed' : ''}`} title={strength.decayed ? `Was ${strength.original}, now ${strength.current} (decay)` : ''}>
-                      {'★'.repeat(strength.current)}
-                      {'☆'.repeat(5 - strength.current)}
-                      {strength.decayed && <span className="decay-indicator">↓</span>}
+          {filteredContacts.map(contact => {
+            const interactionMatches = search ? getInteractionMatches(contact.id, search.toLowerCase()) : [];
+            return (
+              <Link key={contact.id} to={`/contacts/${contact.id}`} className="contact-card">
+                <div className="contact-avatar">
+                  {contact.firstName[0]}{contact.lastName?.[0] || ''}
+                </div>
+                <div className="contact-info">
+                  <div className="contact-name">{contact.firstName} {contact.lastName || ''}</div>
+                  {contact.company && (
+                    <div className="contact-company">
+                      {contact.title ? `${contact.title} at ` : ''}{contact.company}
                     </div>
-                  );
-                })()}
-                {contact.tags?.slice(0, 2).map(tag => (
-                  <span key={tag} className="tag">{tag}</span>
-                ))}
-              </div>
-            </Link>
-          ))}
+                  )}
+                  {!contact.company && contact.email && (
+                    <div className="contact-email">{contact.email}</div>
+                  )}
+                  {interactionMatches.length > 0 && (
+                    <div className="search-matches">
+                      {interactionMatches.map((match, idx) => (
+                        <div key={idx} className="search-match">
+                          <span className="match-icon">📝</span> "{match}"
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <div className="contact-meta">
+                  {(() => {
+                    const strength = getEffectiveStrength(contact);
+                    return (
+                      <div className={`strength-stars ${strength.decayed ? 'decayed' : ''}`} title={strength.decayed ? `Was ${strength.original}, now ${strength.current} (decay)` : ''}>
+                        {'★'.repeat(strength.current)}
+                        {'☆'.repeat(5 - strength.current)}
+                        {strength.decayed && <span className="decay-indicator">↓</span>}
+                      </div>
+                    );
+                  })()}
+                  {contact.tags?.slice(0, 2).map(tag => (
+                    <span key={tag} className="tag">{tag}</span>
+                  ))}
+                </div>
+              </Link>
+            );
+          })}
         </div>
       )}
     </div>
@@ -604,6 +663,8 @@ function ContactDetailPage() {
   const [contactInteractions, setContactInteractions] = useState<Interaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [showLogModal, setShowLogModal] = useState(false);
+  const [showReminderEdit, setShowReminderEdit] = useState(false);
+  const [reminderDate, setReminderDate] = useState('');
 
   useEffect(() => {
     if (id) loadContact(id);
@@ -622,6 +683,28 @@ function ContactDetailPage() {
       setContactInteractions(intRes.data.items || []);
     }
     setLoading(false);
+  };
+
+  const saveReminder = async () => {
+    if (!contact || !id) return;
+    const res = await contacts.update(id, {
+      nextFollowUpAt: reminderDate || undefined
+    });
+    if (res.success && res.data) {
+      setContact(res.data);
+      setShowReminderEdit(false);
+    }
+  };
+
+  const clearReminder = async () => {
+    if (!contact || !id) return;
+    const res = await contacts.update(id, {
+      nextFollowUpAt: undefined
+    });
+    if (res.success && res.data) {
+      setContact(res.data);
+      setReminderDate('');
+    }
   };
 
   const handleDelete = async () => {
@@ -742,6 +825,40 @@ function ContactDetailPage() {
           <span className="action-icon">📝</span>
           <span>Log</span>
         </button>
+      </div>
+
+      <div className="reminder-card">
+        <div className="reminder-header">
+          <span className="reminder-icon">🔔</span>
+          <h3>Follow-up Reminder</h3>
+        </div>
+        {contact.nextFollowUpAt ? (
+          <div className="reminder-set">
+            <div className={`reminder-date ${new Date(contact.nextFollowUpAt) < new Date() ? 'overdue' : ''}`}>
+              {new Date(contact.nextFollowUpAt) < new Date() ? '⚠️ Overdue: ' : '📅 '}
+              {new Date(contact.nextFollowUpAt).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
+            </div>
+            <div className="reminder-actions">
+              <button className="btn-reminder-edit" onClick={() => { setReminderDate(contact.nextFollowUpAt?.split('T')[0] || ''); setShowReminderEdit(true); }}>Change</button>
+              <button className="btn-reminder-clear" onClick={clearReminder}>Clear</button>
+            </div>
+          </div>
+        ) : showReminderEdit ? (
+          <div className="reminder-edit">
+            <input
+              type="date"
+              value={reminderDate}
+              onChange={(e) => setReminderDate(e.target.value)}
+              min={new Date().toISOString().split('T')[0]}
+            />
+            <button className="btn-reminder-save" onClick={saveReminder}>Save</button>
+            <button className="btn-reminder-cancel" onClick={() => setShowReminderEdit(false)}>Cancel</button>
+          </div>
+        ) : (
+          <button className="btn-set-reminder" onClick={() => setShowReminderEdit(true)}>
+            + Set Reminder
+          </button>
+        )}
       </div>
 
       <div className="quick-context-card">
@@ -1899,6 +2016,17 @@ function DashboardPage() {
     return pending;
   };
 
+  const getScheduledReminders = () => {
+    return contactList
+      .filter(c => c.nextFollowUpAt)
+      .map(c => ({
+        contact: c,
+        date: new Date(c.nextFollowUpAt!),
+        isOverdue: new Date(c.nextFollowUpAt!) < new Date()
+      }))
+      .sort((a, b) => a.date.getTime() - b.date.getTime());
+  };
+
   const getDaysSinceContact = (contact: Contact): number => {
     if (!contact.lastContactedAt) return 999;
     const lastContact = new Date(contact.lastContactedAt);
@@ -1969,7 +2097,36 @@ function DashboardPage() {
           <span className="summary-count">{getPendingActions().length}</span>
           <span className="summary-label">Actions</span>
         </div>
+        <div className="summary-stat reminders">
+          <span className="summary-count">{getScheduledReminders().length}</span>
+          <span className="summary-label">Reminders</span>
+        </div>
       </div>
+
+      {getScheduledReminders().length > 0 && (
+        <section className="followup-section reminders-section">
+          <div className="section-header">
+            <span className="section-icon">🔔</span>
+            <h2>Scheduled Reminders</h2>
+            <span className="section-count">{getScheduledReminders().length}</span>
+          </div>
+          <p className="section-desc">Contacts you set reminders for</p>
+          <div className="reminders-list">
+            {getScheduledReminders().slice(0, 8).map(({ contact, date, isOverdue }) => (
+              <Link key={contact.id} to={`/contacts/${contact.id}`} className={`reminder-item ${isOverdue ? 'overdue' : ''}`}>
+                <div className="reminder-item-avatar">{contact.firstName[0]}</div>
+                <div className="reminder-item-info">
+                  <span className="reminder-item-name">{contact.firstName} {contact.lastName}</span>
+                  <span className="reminder-item-date">
+                    {isOverdue ? '⚠️ Overdue: ' : ''}
+                    {date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                  </span>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
 
       {getPendingActions().length > 0 && (
         <section className="followup-section actions-section">
