@@ -87,6 +87,7 @@ function AppLayout({ children }: { children: React.ReactNode }) {
           <span className="nav-title">obani</span>
         </div>
         <div className="nav-links">
+          <Link to="/" className="nav-link">Dashboard</Link>
           <Link to="/contacts" className="nav-link">Contacts</Link>
           <Link to="/interactions" className="nav-link">Activity</Link>
           <Link to="/introductions" className="nav-link">Intros</Link>
@@ -541,6 +542,45 @@ function ContactDetailPage() {
     });
   };
 
+  const getDaysSince = (dateStr?: string): number | null => {
+    if (!dateStr) return null;
+    const date = new Date(dateStr);
+    const now = new Date();
+    return Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
+  };
+
+  const getLastTopic = (): string | null => {
+    if (contactInteractions.length === 0) return null;
+    const lastInt = contactInteractions[0];
+    if (lastInt.keyTopics && lastInt.keyTopics.length > 0) {
+      return lastInt.keyTopics.join(', ');
+    }
+    return null;
+  };
+
+  const getPendingActions = () => {
+    const pending: { text: string; owner: string; contactName: string }[] = [];
+    contactInteractions.forEach(int => {
+      if (int.actionItems) {
+        int.actionItems.forEach(action => {
+          if (!action.completed) {
+            pending.push({ text: action.text, owner: action.owner, contactName: contact?.firstName || '' });
+          }
+        });
+      }
+    });
+    return pending;
+  };
+
+  const getLastInsight = (): string | null => {
+    if (contactInteractions.length === 0) return null;
+    const lastInt = contactInteractions[0];
+    if (lastInt.notes) {
+      return lastInt.notes.length > 100 ? lastInt.notes.substring(0, 100) + '...' : lastInt.notes;
+    }
+    return null;
+  };
+
   if (loading) {
     return <div className="page-loading">Loading contact...</div>;
   }
@@ -593,6 +633,63 @@ function ContactDetailPage() {
           <span className="action-icon">📝</span>
           <span>Log</span>
         </button>
+      </div>
+
+      <div className="quick-context-card">
+        <div className="context-header">
+          <span className="context-icon">📋</span>
+          <h3>Quick Context</h3>
+        </div>
+        <div className="context-grid">
+          <div className="context-item">
+            <span className="context-label">Last Spoke</span>
+            <span className="context-value">
+              {contact.lastContactedAt
+                ? `${getDaysSince(contact.lastContactedAt)} days ago`
+                : 'Never'}
+            </span>
+          </div>
+          {getLastTopic() && (
+            <div className="context-item">
+              <span className="context-label">Last Topic</span>
+              <span className="context-value">{getLastTopic()}</span>
+            </div>
+          )}
+        </div>
+
+        {getPendingActions().length > 0 && (
+          <div className="context-section">
+            <span className="context-section-label">⚡ Pending Actions</span>
+            <ul className="pending-actions-list">
+              {getPendingActions().slice(0, 3).map((action, idx) => (
+                <li key={idx}>
+                  <span className="action-owner-icon">
+                    {action.owner === 'me' ? '👤 You:' : action.owner === 'them' ? `👥 ${contact.firstName}:` : '🤝 Both:'}
+                  </span>
+                  {action.text}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {contact.needs && contact.needs.length > 0 && (
+          <div className="context-section">
+            <span className="context-section-label">🎯 Their Current Needs</span>
+            <div className="context-tags">
+              {contact.needs.map((need, idx) => (
+                <span key={idx} className="tag need">{need}</span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {getLastInsight() && (
+          <div className="context-section">
+            <span className="context-section-label">💡 Last Insight</span>
+            <p className="last-insight">"{getLastInsight()}"</p>
+          </div>
+        )}
       </div>
 
       <div className="detail-sections">
@@ -1048,14 +1145,16 @@ function InteractionModal({
   const [sentiment, setSentiment] = useState<Sentiment>('NEUTRAL');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-  const [actionItems, setActionItems] = useState<{text: string; owner: 'me' | 'them' | 'both'}[]>([]);
+  const [actionItems, setActionItems] = useState<{text: string; owner: 'me' | 'them' | 'both'; dueDate?: string}[]>([]);
   const [newAction, setNewAction] = useState('');
   const [newActionOwner, setNewActionOwner] = useState<'me' | 'them' | 'both'>('me');
+  const [newActionDue, setNewActionDue] = useState('');
 
   const addActionItem = () => {
     if (newAction.trim()) {
-      setActionItems([...actionItems, { text: newAction.trim(), owner: newActionOwner }]);
+      setActionItems([...actionItems, { text: newAction.trim(), owner: newActionOwner, dueDate: newActionDue || undefined }]);
       setNewAction('');
+      setNewActionDue('');
     }
   };
 
@@ -1078,6 +1177,7 @@ function InteractionModal({
         id: `temp-${i}`,
         text: a.text,
         owner: a.owner,
+        dueDate: a.dueDate,
         completed: false
       })) : undefined,
     });
@@ -1160,6 +1260,7 @@ function InteractionModal({
                       {item.owner === 'me' ? '👤' : item.owner === 'them' ? '👥' : '🤝'}
                     </span>
                     <span className="action-text">{item.text}</span>
+                    {item.dueDate && <span className="action-due">Due: {new Date(item.dueDate).toLocaleDateString()}</span>}
                     <button type="button" className="remove-action" onClick={() => removeActionItem(idx)}>×</button>
                   </li>
                 ))}
@@ -1178,6 +1279,12 @@ function InteractionModal({
                 <option value="them">Them</option>
                 <option value="both">Both</option>
               </select>
+              <input
+                type="date"
+                value={newActionDue}
+                onChange={e => setNewActionDue(e.target.value)}
+                className="action-due-input"
+              />
               <button type="button" className="btn-add-action" onClick={addActionItem}>+</button>
             </div>
           </div>
@@ -1524,6 +1631,258 @@ function AnalyticsPage() {
   );
 }
 
+// Follow-Up Dashboard
+function DashboardPage() {
+  const [contactList, setContactList] = useState<Contact[]>([]);
+  const [interactionList, setInteractionList] = useState<Interaction[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const loadData = async () => {
+    const [contactRes, intRes] = await Promise.all([
+      contacts.getAll(),
+      interactions.list(1, 200)
+    ]);
+    if (contactRes.success && contactRes.data) {
+      setContactList(contactRes.data);
+    }
+    if (intRes.success && intRes.data) {
+      setInteractionList(intRes.data.items || []);
+    }
+    setLoading(false);
+  };
+
+  const getPendingActions = () => {
+    const pending: { text: string; owner: string; dueDate?: string; contactId: string; contactName: string }[] = [];
+    interactionList.forEach(int => {
+      if (int.actionItems) {
+        const contact = contactList.find(c => c.id === int.contactId);
+        int.actionItems.forEach(action => {
+          if (!action.completed) {
+            pending.push({
+              text: action.text,
+              owner: action.owner,
+              dueDate: action.dueDate,
+              contactId: int.contactId,
+              contactName: contact ? `${contact.firstName} ${contact.lastName || ''}` : 'Unknown'
+            });
+          }
+        });
+      }
+    });
+    // Sort by due date (items with due dates first, then by date)
+    pending.sort((a, b) => {
+      if (a.dueDate && !b.dueDate) return -1;
+      if (!a.dueDate && b.dueDate) return 1;
+      if (a.dueDate && b.dueDate) return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
+      return 0;
+    });
+    return pending;
+  };
+
+  const getDaysSinceContact = (contact: Contact): number => {
+    if (!contact.lastContactedAt) return 999;
+    const lastContact = new Date(contact.lastContactedAt);
+    const now = new Date();
+    return Math.floor((now.getTime() - lastContact.getTime()) / (1000 * 60 * 60 * 24));
+  };
+
+  const getFollowUpThreshold = (strength: number): number => {
+    if (strength >= 5) return 45;
+    if (strength >= 4) return 60;
+    if (strength >= 3) return 75;
+    return 90;
+  };
+
+  const categorizeContacts = () => {
+    const urgent: Contact[] = [];
+    const dueSoon: Contact[] = [];
+    const onTrack: Contact[] = [];
+
+    contactList.forEach(contact => {
+      if (contact.isArchived) return;
+      const days = getDaysSinceContact(contact);
+      const threshold = getFollowUpThreshold(contact.relationshipStrength);
+
+      if (days >= 90 || (days >= threshold + 30)) {
+        urgent.push(contact);
+      } else if (days >= threshold) {
+        dueSoon.push(contact);
+      } else {
+        onTrack.push(contact);
+      }
+    });
+
+    // Sort by days since contact (most overdue first)
+    urgent.sort((a, b) => getDaysSinceContact(b) - getDaysSinceContact(a));
+    dueSoon.sort((a, b) => getDaysSinceContact(b) - getDaysSinceContact(a));
+
+    return { urgent, dueSoon, onTrack };
+  };
+
+  if (loading) {
+    return <div className="page-loading">Loading dashboard...</div>;
+  }
+
+  const { urgent, dueSoon, onTrack } = categorizeContacts();
+
+  return (
+    <div className="dashboard-page">
+      <div className="page-header">
+        <h1>Follow-Ups</h1>
+        <p className="page-subtitle">Keep your relationships warm</p>
+      </div>
+
+      <div className="dashboard-summary">
+        <div className="summary-stat urgent">
+          <span className="summary-count">{urgent.length}</span>
+          <span className="summary-label">Urgent</span>
+        </div>
+        <div className="summary-stat due-soon">
+          <span className="summary-count">{dueSoon.length}</span>
+          <span className="summary-label">Due Soon</span>
+        </div>
+        <div className="summary-stat on-track">
+          <span className="summary-count">{onTrack.length}</span>
+          <span className="summary-label">On Track</span>
+        </div>
+        <div className="summary-stat actions">
+          <span className="summary-count">{getPendingActions().length}</span>
+          <span className="summary-label">Actions</span>
+        </div>
+      </div>
+
+      {getPendingActions().length > 0 && (
+        <section className="followup-section actions-section">
+          <div className="section-header">
+            <span className="section-icon">⚡</span>
+            <h2>Pending Actions</h2>
+            <span className="section-count">{getPendingActions().length} items</span>
+          </div>
+          <p className="section-desc">Action items from your interactions</p>
+          <div className="pending-actions-dashboard">
+            {getPendingActions().slice(0, 10).map((action, idx) => (
+              <div key={idx} className="pending-action-card">
+                <span className="action-owner-badge">
+                  {action.owner === 'me' ? '👤' : action.owner === 'them' ? '👥' : '🤝'}
+                </span>
+                <div className="action-details">
+                  <span className="action-text-main">{action.text}</span>
+                  <Link to={`/contacts/${action.contactId}`} className="action-contact">
+                    with {action.contactName}
+                  </Link>
+                </div>
+                {action.dueDate && (
+                  <span className={`action-due-badge ${new Date(action.dueDate) < new Date() ? 'overdue' : ''}`}>
+                    {new Date(action.dueDate).toLocaleDateString()}
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {urgent.length > 0 && (
+        <section className="followup-section urgent">
+          <div className="section-header">
+            <span className="section-icon">🔴</span>
+            <h2>Urgent</h2>
+            <span className="section-count">{urgent.length} contacts</span>
+          </div>
+          <p className="section-desc">90+ days since contact - reach out soon!</p>
+          <div className="followup-list">
+            {urgent.map(contact => (
+              <div key={contact.id} className="followup-card">
+                <div className="followup-avatar">{contact.firstName[0]}</div>
+                <div className="followup-info">
+                  <Link to={`/contacts/${contact.id}`} className="followup-name">
+                    {contact.firstName} {contact.lastName}
+                  </Link>
+                  <span className="followup-company">{contact.company || 'No company'}</span>
+                  <span className="followup-days">{getDaysSinceContact(contact)} days ago</span>
+                </div>
+                <div className="followup-strength">
+                  {'❤️'.repeat(contact.relationshipStrength)}
+                </div>
+                <div className="followup-actions">
+                  {contact.email && (
+                    <a href={`mailto:${contact.email}`} className="action-btn email" title="Email">✉️</a>
+                  )}
+                  {contact.phone && (
+                    <a href={`tel:${contact.phone}`} className="action-btn call" title="Call">📞</a>
+                  )}
+                  <Link to={`/contacts/${contact.id}`} className="action-btn view" title="View">👁️</Link>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {dueSoon.length > 0 && (
+        <section className="followup-section due-soon">
+          <div className="section-header">
+            <span className="section-icon">🟡</span>
+            <h2>Due Soon</h2>
+            <span className="section-count">{dueSoon.length} contacts</span>
+          </div>
+          <p className="section-desc">Approaching follow-up threshold</p>
+          <div className="followup-list">
+            {dueSoon.slice(0, 10).map(contact => (
+              <div key={contact.id} className="followup-card">
+                <div className="followup-avatar">{contact.firstName[0]}</div>
+                <div className="followup-info">
+                  <Link to={`/contacts/${contact.id}`} className="followup-name">
+                    {contact.firstName} {contact.lastName}
+                  </Link>
+                  <span className="followup-company">{contact.company || 'No company'}</span>
+                  <span className="followup-days">{getDaysSinceContact(contact)} days ago</span>
+                </div>
+                <div className="followup-strength">
+                  {'❤️'.repeat(contact.relationshipStrength)}
+                </div>
+                <div className="followup-actions">
+                  {contact.email && (
+                    <a href={`mailto:${contact.email}`} className="action-btn email" title="Email">✉️</a>
+                  )}
+                  {contact.phone && (
+                    <a href={`tel:${contact.phone}`} className="action-btn call" title="Call">📞</a>
+                  )}
+                  <Link to={`/contacts/${contact.id}`} className="action-btn view" title="View">👁️</Link>
+                </div>
+              </div>
+            ))}
+            {dueSoon.length > 10 && (
+              <p className="show-more">+{dueSoon.length - 10} more contacts due soon</p>
+            )}
+          </div>
+        </section>
+      )}
+
+      <section className="followup-section on-track">
+        <div className="section-header">
+          <span className="section-icon">🟢</span>
+          <h2>On Track</h2>
+          <span className="section-count">{onTrack.length} contacts</span>
+        </div>
+        <p className="section-desc">Recently contacted - no action needed</p>
+      </section>
+
+      {urgent.length === 0 && dueSoon.length === 0 && (
+        <div className="all-good">
+          <div className="all-good-icon">🎉</div>
+          <h3>All caught up!</h3>
+          <p>Your network is healthy. Keep up the great work!</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Protected Route
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { auth } = useAuth();
@@ -1547,7 +1906,7 @@ function App() {
           <Route path="/interactions" element={<ProtectedRoute><InteractionsPage /></ProtectedRoute>} />
           <Route path="/introductions" element={<ProtectedRoute><IntroductionsPage /></ProtectedRoute>} />
           <Route path="/analytics" element={<ProtectedRoute><AnalyticsPage /></ProtectedRoute>} />
-          <Route path="/" element={<Navigate to="/contacts" replace />} />
+          <Route path="/" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>
