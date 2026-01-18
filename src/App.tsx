@@ -1,4 +1,4 @@
-import { useState, useEffect, createContext, useContext, useCallback } from 'react';
+import { useState, useEffect, createContext, useContext } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, Link, useParams, useNavigate } from 'react-router-dom';
 import { auth, contacts, interactions, introductions, analytics } from './services/api';
 import type { Contact, Interaction, Introduction, AnalyticsDashboard, AuthState, InteractionType, Sentiment } from './types';
@@ -100,21 +100,27 @@ function AppLayout({ children }: { children: React.ReactNode }) {
 
 // Login Page
 function LoginPage() {
-  const { login } = useAuth();
+  const { login, register } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
   const [isRegister, setIsRegister] = useState(false);
   const [name, setName] = useState('');
-  const { register } = useAuth();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    const err = isRegister
-      ? await register(email, password, name)
-      : await login(email, password);
-    if (err) setError(err);
+    setLoading(true);
+    try {
+      const err = isRegister
+        ? await register(email, password, name)
+        : await login(email, password);
+      if (err) setError(err);
+    } catch (err) {
+      setError('Network error. Please try again.');
+    }
+    setLoading(false);
   };
 
   return (
@@ -134,6 +140,7 @@ function LoginPage() {
               value={name}
               onChange={(e) => setName(e.target.value)}
               required
+              disabled={loading}
             />
           )}
           <input
@@ -142,6 +149,7 @@ function LoginPage() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
+            disabled={loading}
           />
           <input
             type="password"
@@ -150,9 +158,10 @@ function LoginPage() {
             onChange={(e) => setPassword(e.target.value)}
             required
             minLength={8}
+            disabled={loading}
           />
-          <button type="submit" className="btn primary">
-            {isRegister ? 'Create Account' : 'Sign In'}
+          <button type="submit" className="btn primary" disabled={loading}>
+            {loading ? 'Please wait...' : (isRegister ? 'Create Account' : 'Sign In')}
           </button>
         </form>
 
@@ -472,6 +481,7 @@ function ContactFormPage() {
   const isEdit = id && id !== 'new';
   const [loading, setLoading] = useState(isEdit);
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
   const [form, setForm] = useState({
     firstName: '',
     lastName: '',
@@ -512,6 +522,7 @@ function ContactFormPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError('');
     setSaving(true);
 
     const data = {
@@ -535,6 +546,8 @@ function ContactFormPage() {
     setSaving(false);
     if (res.success && res.data) {
       navigate(`/contacts/${res.data.id}`);
+    } else {
+      setError(res.error || 'Failed to save contact');
     }
   };
 
@@ -548,6 +561,8 @@ function ContactFormPage() {
         <button className="back-btn" onClick={() => navigate(-1)}>← Back</button>
         <h1>{isEdit ? 'Edit Contact' : 'New Contact'}</h1>
       </div>
+
+      {error && <div className="error">{error}</div>}
 
       <form onSubmit={handleSubmit} className="contact-form">
         <div className="form-row">
@@ -692,9 +707,11 @@ function InteractionModal({
   const [notes, setNotes] = useState('');
   const [sentiment, setSentiment] = useState<Sentiment>('NEUTRAL');
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError('');
     setSaving(true);
     const res = await interactions.create({
       contactId,
@@ -707,6 +724,8 @@ function InteractionModal({
     setSaving(false);
     if (res.success && res.data) {
       onSuccess(res.data);
+    } else {
+      setError(res.error || 'Failed to save interaction');
     }
   };
 
@@ -718,6 +737,8 @@ function InteractionModal({
           <button className="close-btn" onClick={onClose}>×</button>
         </div>
         <p className="modal-subtitle">with {contactName}</p>
+
+        {error && <div className="error">{error}</div>}
 
         <form onSubmit={handleSubmit}>
           <div className="form-group">

@@ -1,6 +1,6 @@
 import type { ApiResponse, PaginatedResponse, Contact, Interaction, Introduction, AnalyticsDashboard } from '../types';
 
-const API_URL = 'https://obani-api-new.vercel.app/api';
+const API_URL = 'https://obani.vercel.app/api';
 
 function getToken(): string | null {
   const stored = localStorage.getItem('obani_auth');

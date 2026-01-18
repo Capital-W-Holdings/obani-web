@@ -74,9 +74,9 @@ export interface User {
   email: string;
   name: string;
   avatarUrl?: string;
-  timezone: string;
-  createdAt: string;
-  updatedAt: string;
+  timezone?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface AuthState {
