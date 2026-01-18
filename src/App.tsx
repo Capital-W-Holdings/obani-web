@@ -8907,6 +8907,9 @@ function DashboardPage() {
   const [equityActions, setEquityActions] = useState<EquityAction[]>([]);
   const [recentlyViewedContacts, setRecentlyViewedContacts] = useState<{ contact: Contact; viewedAt: string }[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showMeetingPrep, setShowMeetingPrep] = useState<NetworkEvent | null>(null);
+  const [showQuickLog, setShowQuickLog] = useState(false);
+  const navigate = useNavigate();
 
   useEffect(() => {
     loadData();
@@ -9050,6 +9053,76 @@ function DashboardPage() {
       })
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
       .slice(0, 5);
+  };
+
+  // Get today's meetings with contact info
+  const getTodaysMeetings = () => {
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    return events
+      .filter(e => {
+        const eventDate = new Date(e.date);
+        return eventDate >= today && eventDate < tomorrow;
+      })
+      .map(event => {
+        const eventContacts = event.contactIds
+          .map(cId => contactList.find(c => c.id === cId))
+          .filter((c): c is Contact => c !== undefined);
+        const eventTime = new Date(event.date);
+        const hoursUntil = (eventTime.getTime() - now.getTime()) / (1000 * 60 * 60);
+        const isPast = hoursUntil < 0;
+        const isSoon = hoursUntil >= 0 && hoursUntil <= 1;
+        const isNow = hoursUntil >= -0.5 && hoursUntil <= 0.5;
+
+        return {
+          event,
+          contacts: eventContacts,
+          hoursUntil,
+          isPast,
+          isSoon,
+          isNow,
+          timeLabel: eventTime.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+        };
+      })
+      .sort((a, b) => new Date(a.event.date).getTime() - new Date(b.event.date).getTime());
+  };
+
+  // Get contact context for meeting prep
+  const getContactMeetingContext = (contact: Contact) => {
+    const contactInteractions = interactionList
+      .filter(i => i.contactId === contact.id)
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+    const lastInteraction = contactInteractions[0];
+    const allTopics: string[] = [];
+    const pendingActions: { text: string; owner: string }[] = [];
+
+    contactInteractions.forEach(i => {
+      (i.keyTopics || []).forEach(t => {
+        if (!allTopics.includes(t)) allTopics.push(t);
+      });
+      (i.actionItems || []).forEach(a => {
+        if (!a.completed) {
+          pendingActions.push({ text: a.text, owner: a.owner });
+        }
+      });
+    });
+
+    const contactEquity = equityActions
+      .filter(a => a.contactId === contact.id)
+      .reduce((sum, a) => sum + a.points, 0);
+
+    return {
+      lastInteraction,
+      recentTopics: allTopics.slice(0, 5),
+      pendingActions: pendingActions.slice(0, 3),
+      totalInteractions: contactInteractions.length,
+      equityScore: contactEquity,
+      equityStatus: getEquityStatus(contactEquity)
+    };
   };
 
   // Get ideas in progress
@@ -9286,6 +9359,7 @@ function DashboardPage() {
 
   const { urgent, dueSoon, onTrack } = categorizeContacts();
   const upcomingEvents = getUpcomingEvents();
+  const todaysMeetings = getTodaysMeetings();
   const activeIdeas = getActiveIdeas();
   const recentActivity = getRecentActivity();
   const networkStats = getNetworkStats();
@@ -9575,6 +9649,59 @@ function DashboardPage() {
 
       {/* Dashboard Widgets Grid */}
       <div className="dashboard-widgets-grid">
+        {/* Today's Meetings Widget - Conversation Intelligence */}
+        {todaysMeetings.length > 0 && (
+          <div className="dashboard-widget todays-meetings-widget">
+            <div className="widget-header">
+              <span className="widget-icon">🎯</span>
+              <h3>Today's Meetings</h3>
+              <span className="meeting-count">{todaysMeetings.length}</span>
+            </div>
+            <div className="widget-content">
+              {todaysMeetings.map(({ event, contacts, timeLabel, isSoon, isNow, isPast }) => (
+                <div key={event.id} className={`meeting-item ${isNow ? 'now' : isSoon ? 'soon' : isPast ? 'past' : ''}`}>
+                  <div className="meeting-time">
+                    <span className={`time-badge ${isNow ? 'now' : isSoon ? 'soon' : isPast ? 'past' : ''}`}>
+                      {isNow ? 'NOW' : isPast ? 'Done' : timeLabel}
+                    </span>
+                  </div>
+                  <div className="meeting-info">
+                    <span className="meeting-name">{event.name}</span>
+                    {contacts.length > 0 && (
+                      <div className="meeting-attendees">
+                        {contacts.slice(0, 2).map(c => (
+                          <span key={c.id} className="attendee-chip">{c.firstName}</span>
+                        ))}
+                        {contacts.length > 2 && (
+                          <span className="attendee-chip more">+{contacts.length - 2}</span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  <div className="meeting-actions">
+                    {!isPast && contacts.length > 0 && (
+                      <button
+                        className="btn-meeting-prep"
+                        onClick={() => setShowMeetingPrep(event)}
+                      >
+                        Prep
+                      </button>
+                    )}
+                    {isPast && contacts.length > 0 && (
+                      <button
+                        className="btn-meeting-log"
+                        onClick={() => setShowQuickLog(true)}
+                      >
+                        Log
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Upcoming Events Widget */}
         {upcomingEvents.length > 0 && (
           <div className="dashboard-widget">
@@ -9984,6 +10111,151 @@ function DashboardPage() {
           <h3>All caught up!</h3>
           <p>Your network is healthy. Keep up the great work!</p>
         </div>
+      )}
+
+      {/* Meeting Prep Modal */}
+      {showMeetingPrep && (
+        <div className="modal-overlay" onClick={() => setShowMeetingPrep(null)}>
+          <div className="modal meeting-prep-modal" onClick={e => e.stopPropagation()}>
+            <div className="meeting-prep-header">
+              <div className="meeting-prep-title">
+                <span className="prep-icon">🎯</span>
+                <div>
+                  <h2>Meeting Prep</h2>
+                  <p className="meeting-prep-event">{showMeetingPrep.name}</p>
+                  <p className="meeting-prep-time">
+                    {new Date(showMeetingPrep.date).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
+                    {showMeetingPrep.location && ` • ${showMeetingPrep.location}`}
+                  </p>
+                </div>
+              </div>
+              <button className="close-btn" onClick={() => setShowMeetingPrep(null)}>×</button>
+            </div>
+
+            <div className="meeting-prep-content">
+              {showMeetingPrep.contactIds.map(contactId => {
+                const contact = contactList.find(c => c.id === contactId);
+                if (!contact) return null;
+                const context = getContactMeetingContext(contact);
+
+                return (
+                  <div key={contact.id} className="prep-contact-card">
+                    <div className="prep-contact-header">
+                      <div className="prep-avatar">{contact.firstName[0]}</div>
+                      <div className="prep-contact-info">
+                        <h3>{contact.firstName} {contact.lastName || ''}</h3>
+                        {contact.title && contact.company && (
+                          <p>{contact.title} at {contact.company}</p>
+                        )}
+                      </div>
+                      <Link to={`/contacts/${contact.id}`} className="view-profile-link" onClick={() => setShowMeetingPrep(null)}>
+                        View
+                      </Link>
+                    </div>
+
+                    <div className="prep-context-grid">
+                      <div className="prep-context-item">
+                        <span className="context-label">Last Contact</span>
+                        <span className="context-value">
+                          {context.lastInteraction
+                            ? `${Math.floor((Date.now() - new Date(context.lastInteraction.date).getTime()) / (1000 * 60 * 60 * 24))} days ago`
+                            : 'Never'}
+                        </span>
+                      </div>
+                      <div className="prep-context-item">
+                        <span className="context-label">Interactions</span>
+                        <span className="context-value">{context.totalInteractions}</span>
+                      </div>
+                      <div className="prep-context-item">
+                        <span className="context-label">Equity</span>
+                        <span className={`context-value equity-${context.equityStatus.toLowerCase()}`}>
+                          {context.equityScore >= 0 ? '+' : ''}{context.equityScore}
+                        </span>
+                      </div>
+                    </div>
+
+                    {context.recentTopics.length > 0 && (
+                      <div className="prep-section">
+                        <span className="prep-section-label">Recent Topics</span>
+                        <div className="prep-topics">
+                          {context.recentTopics.map((topic, idx) => (
+                            <span key={idx} className="prep-topic-tag">{topic}</span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {contact.needs && contact.needs.length > 0 && (
+                      <div className="prep-section">
+                        <span className="prep-section-label">Their Needs</span>
+                        <div className="prep-needs">
+                          {contact.needs.slice(0, 3).map((need, idx) => (
+                            <span key={idx} className="prep-need-tag">{need}</span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {context.pendingActions.length > 0 && (
+                      <div className="prep-section">
+                        <span className="prep-section-label">Open Items</span>
+                        <ul className="prep-actions-list">
+                          {context.pendingActions.map((action, idx) => (
+                            <li key={idx}>
+                              <span className="action-owner-mini">
+                                {action.owner === 'me' ? '👤' : action.owner === 'them' ? '👥' : '🤝'}
+                              </span>
+                              {action.text}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {contact.howWeMet && (
+                      <div className="prep-section how-met">
+                        <span className="prep-section-label">How You Met</span>
+                        <p>{contact.howWeMet}</p>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+
+              {showMeetingPrep.notes && (
+                <div className="prep-event-notes">
+                  <span className="prep-section-label">Meeting Notes</span>
+                  <p>{showMeetingPrep.notes}</p>
+                </div>
+              )}
+            </div>
+
+            <div className="meeting-prep-actions">
+              <button className="btn secondary" onClick={() => setShowMeetingPrep(null)}>Close</button>
+              {showMeetingPrep.contactIds.length > 0 && (
+                <button
+                  className="btn primary"
+                  onClick={() => {
+                    const firstContact = contactList.find(c => c.id === showMeetingPrep.contactIds[0]);
+                    if (firstContact) {
+                      navigate(`/contacts/${firstContact.id}`);
+                      setShowMeetingPrep(null);
+                    }
+                  }}
+                >
+                  View Full Profile
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Quick Post-Meeting Log Modal */}
+      {showQuickLog && (
+        <QuickLogModal
+          onClose={() => setShowQuickLog(false)}
+        />
       )}
     </div>
   );
