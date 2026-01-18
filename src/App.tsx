@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import './App.css';
 
-const API_URL = 'https://obani-api-new.vercel.app/api';
+const API_URL = 'https://obani.vercel.app/api';
 
 interface User {
   id: string;
@@ -156,9 +156,9 @@ function App() {
     return (
       <div className="container">
         <div className="card auth-card">
-          <div className="logo">🤝</div>
-          <h1>Welcome to Obani</h1>
-          <p className="subtitle">Personal Operating System for Relationships</p>
+          <div className="logo"></div>
+          <h1>obani</h1>
+          <p className="subtitle">The Relationship Operating System</p>
 
           {error && <div className="error">{error}</div>}
 
@@ -196,8 +196,9 @@ function App() {
     return (
       <div className="container">
         <div className="card auth-card">
-          <div className="logo">🤝</div>
-          <h1>Create Account</h1>
+          <div className="logo"></div>
+          <h1>obani</h1>
+          <p className="subtitle">Create Your Account</p>
 
           {error && <div className="error">{error}</div>}
 
@@ -292,8 +293,10 @@ function App() {
     <div className="container">
       <header className="header">
         <div className="header-left">
-          <span className="logo-small">🤝</span>
-          <h1>Obani</h1>
+          <div className="header-icon">
+            <span className="logo-small"></span>
+          </div>
+          <h1>obani</h1>
         </div>
         <div className="header-right">
           <span className="user-name">{auth.user?.name}</span>
@@ -308,7 +311,7 @@ function App() {
 
       {contacts.length === 0 ? (
         <div className="empty-state">
-          <div className="empty-icon">👥</div>
+          <div className="empty-icon"></div>
           <h3>No contacts yet</h3>
           <p>Add your first contact to get started</p>
           <button className="btn primary" onClick={() => setView('newContact')}>Add Contact</button>
