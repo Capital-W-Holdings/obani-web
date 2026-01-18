@@ -3521,6 +3521,148 @@ function ContactDetailPage() {
         )}
       </div>
 
+      {/* Catch Me Up - Meeting Brief */}
+      {(() => {
+        const recentInteractions = contactInteractions
+          .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+          .slice(0, 3);
+
+        // Extract key topics from all interactions
+        const allTopics: string[] = [];
+        contactInteractions.forEach(i => {
+          (i.keyTopics || []).forEach(t => {
+            if (!allTopics.includes(t)) allTopics.push(t);
+          });
+        });
+
+        // Get all pending actions
+        const allPendingActions: { text: string; owner: string; dueDate?: string }[] = [];
+        contactInteractions.forEach(i => {
+          (i.actionItems || []).forEach(a => {
+            if (!a.completed) {
+              allPendingActions.push({ text: a.text, owner: a.owner, dueDate: a.dueDate });
+            }
+          });
+        });
+
+        // Build narrative summary
+        const buildNarrative = () => {
+          const parts: string[] = [];
+
+          // How you know them
+          if (contact.howWeMet) {
+            parts.push(`You met ${contact.firstName} ${contact.howWeMet}.`);
+          }
+
+          // Relationship duration
+          const createdDate = new Date(contact.createdAt);
+          const monthsKnown = Math.floor((Date.now() - createdDate.getTime()) / (1000 * 60 * 60 * 24 * 30));
+          if (monthsKnown > 0) {
+            parts.push(`You've known them for ${monthsKnown} month${monthsKnown > 1 ? 's' : ''}.`);
+          }
+
+          // Last interaction
+          if (recentInteractions.length > 0) {
+            const last = recentInteractions[0];
+            const daysSince = Math.floor((Date.now() - new Date(last.date).getTime()) / (1000 * 60 * 60 * 24));
+            const typeLabel = last.type.charAt(0) + last.type.slice(1).toLowerCase();
+            parts.push(`Your last ${typeLabel.toLowerCase()} was ${daysSince === 0 ? 'today' : daysSince === 1 ? 'yesterday' : `${daysSince} days ago`}.`);
+          }
+
+          // Topics
+          if (allTopics.length > 0) {
+            const topicList = allTopics.slice(0, 3).join(', ');
+            parts.push(`Key topics: ${topicList}.`);
+          }
+
+          // Pending actions
+          if (allPendingActions.length > 0) {
+            const youOwn = allPendingActions.filter(a => a.owner === 'me' || a.owner === 'both').length;
+            const theyOwn = allPendingActions.filter(a => a.owner === 'them' || a.owner === 'both').length;
+            if (youOwn > 0) parts.push(`You have ${youOwn} pending action${youOwn > 1 ? 's' : ''}.`);
+            if (theyOwn > 0) parts.push(`${contact.firstName} has ${theyOwn} pending item${theyOwn > 1 ? 's' : ''}.`);
+          }
+
+          return parts.join(' ');
+        };
+
+        const narrative = buildNarrative();
+        const hasContent = narrative.length > 0 || recentInteractions.length > 0;
+
+        if (!hasContent) return null;
+
+        return (
+          <div className="catch-me-up-card">
+            <div className="catch-me-up-header">
+              <span className="catch-me-up-icon">🧠</span>
+              <div className="catch-me-up-title">
+                <h3>Catch Me Up</h3>
+                <span className="catch-me-up-subtitle">Your brief before the next chat</span>
+              </div>
+            </div>
+
+            {narrative && (
+              <div className="catch-me-up-narrative">
+                <p>{narrative}</p>
+              </div>
+            )}
+
+            {recentInteractions.length > 0 && (
+              <div className="catch-me-up-timeline">
+                <span className="timeline-label">Recent Conversations</span>
+                {recentInteractions.map(interaction => (
+                  <div key={interaction.id} className="timeline-item-brief">
+                    <div className="timeline-date">
+                      {new Date(interaction.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                    </div>
+                    <div className="timeline-content">
+                      <span className="timeline-type">
+                        {interaction.type === 'MEETING' ? '🤝' :
+                         interaction.type === 'CALL' ? '📞' :
+                         interaction.type === 'EMAIL' ? '✉️' :
+                         interaction.type === 'EVENT' ? '🎉' : '💬'}
+                        {' '}{interaction.type.charAt(0) + interaction.type.slice(1).toLowerCase()}
+                      </span>
+                      {interaction.notes && (
+                        <p className="timeline-note">
+                          {interaction.notes.slice(0, 100)}{interaction.notes.length > 100 ? '...' : ''}
+                        </p>
+                      )}
+                      {interaction.keyTopics && interaction.keyTopics.length > 0 && (
+                        <div className="timeline-topics">
+                          {interaction.keyTopics.slice(0, 2).map((topic, idx) => (
+                            <span key={idx} className="topic-tag">{topic}</span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {allPendingActions.length > 0 && (
+              <div className="catch-me-up-actions">
+                <span className="actions-label">⚡ Open Items</span>
+                {allPendingActions.slice(0, 3).map((action, idx) => (
+                  <div key={idx} className="action-item-brief">
+                    <span className={`action-owner ${action.owner}`}>
+                      {action.owner === 'me' ? '👤' : action.owner === 'them' ? '👥' : '🤝'}
+                    </span>
+                    <span className="action-text">{action.text}</span>
+                    {action.dueDate && (
+                      <span className={`action-due ${new Date(action.dueDate) < new Date() ? 'overdue' : ''}`}>
+                        {new Date(action.dueDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
       {/* Relationship Equity Card */}
       {(() => {
         const equity = getContactEquity(contact.id);

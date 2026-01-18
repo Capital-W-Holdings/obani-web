@@ -11908,6 +11908,195 @@ label {
 }
 
 /* ============================================ */
+/* CATCH ME UP - MEETING BRIEF CARD */
+/* ============================================ */
+
+.catch-me-up-card {
+  background: linear-gradient(135deg, #1e3a5f 0%, #2d4a6f 50%, #1a4466 100%);
+  border-radius: 20px;
+  padding: 20px;
+  margin-bottom: 16px;
+  color: white;
+  box-shadow: 0 6px 24px rgba(30, 58, 95, 0.25);
+}
+
+.catch-me-up-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.catch-me-up-icon {
+  font-size: 28px;
+}
+
+.catch-me-up-title h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: white;
+}
+
+.catch-me-up-subtitle {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.catch-me-up-narrative {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  padding: 14px;
+  margin-bottom: 16px;
+}
+
+.catch-me-up-narrative p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.6;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.catch-me-up-timeline {
+  margin-bottom: 16px;
+}
+
+.timeline-label,
+.actions-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: rgba(255, 255, 255, 0.5);
+  margin-bottom: 10px;
+}
+
+.timeline-item-brief {
+  display: flex;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.timeline-item-brief:last-child {
+  border-bottom: none;
+}
+
+.timeline-date {
+  font-size: 11px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.6);
+  min-width: 50px;
+  padding-top: 2px;
+}
+
+.timeline-content {
+  flex: 1;
+}
+
+.timeline-type {
+  font-size: 13px;
+  font-weight: 500;
+  color: white;
+}
+
+.timeline-note {
+  margin: 6px 0 0 0;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.7);
+  line-height: 1.5;
+}
+
+.timeline-topics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.topic-tag {
+  font-size: 10px;
+  padding: 3px 8px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.15);
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.catch-me-up-actions {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 12px;
+}
+
+.action-item-brief {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.action-item-brief:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.action-item-brief:first-child {
+  padding-top: 0;
+}
+
+.action-owner {
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.action-text {
+  flex: 1;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.action-due {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.7);
+  flex-shrink: 0;
+}
+
+.action-due.overdue {
+  background: rgba(220, 38, 38, 0.3);
+  color: #FCA5A5;
+}
+
+/* Mobile adjustments for Catch Me Up */
+@media (max-width: 768px) {
+  .catch-me-up-card {
+    margin: 0 -16px 16px -16px;
+    border-radius: 0;
+    padding: 18px 16px;
+  }
+
+  .catch-me-up-icon {
+    font-size: 24px;
+  }
+
+  .catch-me-up-title h3 {
+    font-size: 16px;
+  }
+
+  .catch-me-up-narrative p {
+    font-size: 13px;
+  }
+
+  .timeline-item-brief {
+    padding: 8px 0;
+  }
+}
+
+/* ============================================ */
 /* DAILY DIGEST - LUXURY MORNING BRIEFING */
 /* ============================================ */
 
