@@ -61,6 +61,23 @@ export interface Interaction {
 
 export type IntroductionStatus = 'SUGGESTED' | 'PENDING' | 'MADE' | 'COMPLETED' | 'DECLINED';
 
+// Idea Pipeline
+export type IdeaStage = 'INCOMING' | 'RESEARCHING' | 'IN_DISCUSSION' | 'COMMITTED' | 'COMPLETED' | 'ARCHIVED';
+
+export interface Idea {
+  id: string;
+  title: string;
+  description?: string;
+  stage: IdeaStage;
+  contactIds: string[];
+  tags: string[];
+  priority: 'LOW' | 'MEDIUM' | 'HIGH';
+  dueDate?: string;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface Introduction {
   id: string;
   userId: string;
@@ -110,6 +127,71 @@ export interface PaginatedResponse<T> {
   totalPages: number;
 }
 
+// Relationship Equity
+export type EquityActionType =
+  | 'INTRO_MADE' | 'INTRO_SUCCESS' | 'CONTENT_SHARED' | 'ADVICE_GIVEN' | 'REFERRAL_MADE' | 'ENDORSED' | 'FAVOR_DONE'
+  | 'ASKED_INTRO' | 'ASKED_ADVICE' | 'PITCHED_SERVICE' | 'ASKED_INVESTMENT' | 'ASKED_FAVOR'
+  | 'CANCELED_MEETING' | 'NO_SHOW' | 'NO_RESPONSE';
+
+export interface EquityAction {
+  id: string;
+  contactId: string;
+  type: EquityActionType;
+  points: number;
+  notes?: string;
+  date: string;
+  createdAt: string;
+}
+
+export type EquityStatus = 'SUPER_GIVER' | 'HEALTHY' | 'BALANCED' | 'OVERDRAWN' | 'TOXIC';
+
+export function getEquityStatus(score: number): EquityStatus {
+  if (score >= 10) return 'SUPER_GIVER';
+  if (score >= 3) return 'HEALTHY';
+  if (score >= -1) return 'BALANCED';
+  if (score >= -5) return 'OVERDRAWN';
+  return 'TOXIC';
+}
+
+export const EQUITY_POINT_VALUES: Record<EquityActionType, number> = {
+  INTRO_MADE: 3,
+  INTRO_SUCCESS: 5,
+  CONTENT_SHARED: 1,
+  ADVICE_GIVEN: 2,
+  REFERRAL_MADE: 5,
+  ENDORSED: 2,
+  FAVOR_DONE: 2,
+  ASKED_INTRO: -2,
+  ASKED_ADVICE: -1,
+  PITCHED_SERVICE: -3,
+  ASKED_INVESTMENT: -4,
+  ASKED_FAVOR: -2,
+  CANCELED_MEETING: -1,
+  NO_SHOW: -3,
+  NO_RESPONSE: -1,
+};
+
+// Content Library
+export type ContentType = 'ARTICLE' | 'PODCAST' | 'VIDEO' | 'BOOK' | 'REPORT' | 'OTHER';
+
+export interface ContentItem {
+  id: string;
+  url?: string;
+  title: string;
+  contentType: ContentType;
+  author?: string;
+  publication?: string;
+  publishedDate?: string;
+  myNotes?: string;
+  keyTakeaways: string[];
+  tags: string[];
+  relevantContactIds: string[];
+  sharedWithContactIds: string[];
+  savedAt: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface AnalyticsDashboard {
   networkHealth: {
     totalContacts: number;
@@ -137,4 +219,52 @@ export interface AnalyticsDashboard {
     monthlyTrend: { month: string; count: number }[];
   };
   atRiskContacts: Contact[];
+}
+
+// Personal Notes
+export type NoteType = 'TODO' | 'IDEA' | 'INSIGHT' | 'JOURNAL' | 'OTHER';
+
+export interface PersonalNote {
+  id: string;
+  title?: string;
+  content: string;
+  noteType: NoteType;
+  tags: string[];
+  priority: 1 | 2 | 3 | 4 | 5;
+  dueDate?: string;
+  status: 'active' | 'done' | 'archived';
+  createdAt: string;
+  updatedAt: string;
+  completedAt?: string;
+}
+
+// Events
+export type EventType = 'CONFERENCE' | 'MEETUP' | 'DINNER' | 'WORKSHOP' | 'WEBINAR' | 'NETWORKING' | 'OTHER';
+
+export interface NetworkEvent {
+  id: string;
+  name: string;
+  eventType: EventType;
+  date: string;
+  endDate?: string;
+  location?: string;
+  description?: string;
+  url?: string;
+  contactIds: string[];
+  tags: string[];
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// Contact Groups
+export interface ContactGroup {
+  id: string;
+  name: string;
+  description?: string;
+  color: string;
+  icon: string;
+  contactIds: string[];
+  createdAt: string;
+  updatedAt: string;
 }
