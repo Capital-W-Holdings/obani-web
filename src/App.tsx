@@ -194,6 +194,13 @@ function LoginPage() {
 }
 
 // Contacts Page
+interface FilterPreset {
+  name: string;
+  minStrength: number;
+  sectorFilter: string;
+  lastContactFilter: '' | '30' | '60' | '90' | '90+';
+}
+
 function ContactsPage() {
   const [contactList, setContactList] = useState<Contact[]>([]);
   const [loading, setLoading] = useState(true);
@@ -204,10 +211,45 @@ function ContactsPage() {
   const [minStrength, setMinStrength] = useState(0);
   const [sectorFilter, setSectorFilter] = useState('');
   const [lastContactFilter, setLastContactFilter] = useState<'' | '30' | '60' | '90' | '90+'>('');
+  const [savedPresets, setSavedPresets] = useState<FilterPreset[]>([]);
+  const [newPresetName, setNewPresetName] = useState('');
+  const [showSavePreset, setShowSavePreset] = useState(false);
 
   useEffect(() => {
     loadContacts();
+    // Load saved presets from localStorage
+    const stored = localStorage.getItem('obani_filter_presets');
+    if (stored) {
+      setSavedPresets(JSON.parse(stored));
+    }
   }, []);
+
+  const savePreset = () => {
+    if (!newPresetName.trim()) return;
+    const preset: FilterPreset = {
+      name: newPresetName.trim(),
+      minStrength,
+      sectorFilter,
+      lastContactFilter
+    };
+    const updated = [...savedPresets, preset];
+    setSavedPresets(updated);
+    localStorage.setItem('obani_filter_presets', JSON.stringify(updated));
+    setNewPresetName('');
+    setShowSavePreset(false);
+  };
+
+  const loadPreset = (preset: FilterPreset) => {
+    setMinStrength(preset.minStrength);
+    setSectorFilter(preset.sectorFilter);
+    setLastContactFilter(preset.lastContactFilter);
+  };
+
+  const deletePreset = (index: number) => {
+    const updated = savedPresets.filter((_, i) => i !== index);
+    setSavedPresets(updated);
+    localStorage.setItem('obani_filter_presets', JSON.stringify(updated));
+  };
 
   const loadContacts = async () => {
     setLoading(true);
@@ -437,6 +479,40 @@ function ContactsPage() {
                 </button>
               ))}
             </div>
+          </div>
+
+          <div className="filter-group presets-group">
+            <label>Saved Presets</label>
+            {savedPresets.length > 0 && (
+              <div className="preset-chips">
+                {savedPresets.map((preset, idx) => (
+                  <div key={idx} className="preset-chip">
+                    <button className="preset-load" onClick={() => loadPreset(preset)}>
+                      {preset.name}
+                    </button>
+                    <button className="preset-delete" onClick={() => deletePreset(idx)}>×</button>
+                  </div>
+                ))}
+              </div>
+            )}
+            {activeFilterCount > 0 && !showSavePreset && (
+              <button className="save-preset-btn" onClick={() => setShowSavePreset(true)}>
+                + Save Current Filter
+              </button>
+            )}
+            {showSavePreset && (
+              <div className="save-preset-form">
+                <input
+                  type="text"
+                  value={newPresetName}
+                  onChange={(e) => setNewPresetName(e.target.value)}
+                  placeholder="Preset name..."
+                  onKeyDown={(e) => { if (e.key === 'Enter') savePreset(); }}
+                />
+                <button className="btn-save-preset" onClick={savePreset}>Save</button>
+                <button className="btn-cancel-preset" onClick={() => { setShowSavePreset(false); setNewPresetName(''); }}>Cancel</button>
+              </div>
+            )}
           </div>
 
           {activeFilterCount > 0 && (
@@ -840,6 +916,12 @@ function ContactFormPage() {
   const [loading, setLoading] = useState(isEdit);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [allTags, setAllTags] = useState<string[]>([]);
+  const [allSectors, setAllSectors] = useState<string[]>([]);
+  const [tagSuggestions, setTagSuggestions] = useState<string[]>([]);
+  const [sectorSuggestions, setSectorSuggestions] = useState<string[]>([]);
+  const [showTagSuggestions, setShowTagSuggestions] = useState(false);
+  const [showSectorSuggestions, setShowSectorSuggestions] = useState(false);
   const [form, setForm] = useState({
     firstName: '',
     lastName: '',
@@ -859,6 +941,22 @@ function ContactFormPage() {
     relationshipStrength: 3,
     linkedinUrl: '',
   });
+
+  // Fetch all tags and sectors from existing contacts
+  useEffect(() => {
+    contacts.getAll().then(res => {
+      if (res.success && res.data) {
+        const tags = new Set<string>();
+        const sectors = new Set<string>();
+        res.data.forEach(c => {
+          c.tags?.forEach(t => tags.add(t));
+          c.sectors?.forEach(s => sectors.add(s));
+        });
+        setAllTags([...tags].sort());
+        setAllSectors([...sectors].sort());
+      }
+    });
+  }, []);
 
   useEffect(() => {
     if (isEdit && id) {
@@ -925,6 +1023,55 @@ function ContactFormPage() {
     } else {
       setError(res.error || 'Failed to save contact');
     }
+  };
+
+  const handleTagsChange = (value: string) => {
+    setForm({ ...form, tags: value });
+    // Get the last tag being typed (after the last comma)
+    const parts = value.split(',');
+    const lastPart = parts[parts.length - 1].trim().toLowerCase();
+    if (lastPart.length > 0) {
+      const currentTags = parts.slice(0, -1).map(t => t.trim().toLowerCase());
+      const suggestions = allTags.filter(t =>
+        t.toLowerCase().includes(lastPart) && !currentTags.includes(t.toLowerCase())
+      ).slice(0, 5);
+      setTagSuggestions(suggestions);
+      setShowTagSuggestions(suggestions.length > 0);
+    } else {
+      setShowTagSuggestions(false);
+    }
+  };
+
+  const addTagSuggestion = (tag: string) => {
+    const parts = form.tags.split(',').map(t => t.trim()).filter(Boolean);
+    parts.pop(); // Remove the partial tag
+    parts.push(tag);
+    setForm({ ...form, tags: parts.join(', ') + ', ' });
+    setShowTagSuggestions(false);
+  };
+
+  const handleSectorsChange = (value: string) => {
+    setForm({ ...form, sectors: value });
+    const parts = value.split(',');
+    const lastPart = parts[parts.length - 1].trim().toLowerCase();
+    if (lastPart.length > 0) {
+      const currentSectors = parts.slice(0, -1).map(t => t.trim().toLowerCase());
+      const suggestions = allSectors.filter(s =>
+        s.toLowerCase().includes(lastPart) && !currentSectors.includes(s.toLowerCase())
+      ).slice(0, 5);
+      setSectorSuggestions(suggestions);
+      setShowSectorSuggestions(suggestions.length > 0);
+    } else {
+      setShowSectorSuggestions(false);
+    }
+  };
+
+  const addSectorSuggestion = (sector: string) => {
+    const parts = form.sectors.split(',').map(t => t.trim()).filter(Boolean);
+    parts.pop();
+    parts.push(sector);
+    setForm({ ...form, sectors: parts.join(', ') + ', ' });
+    setShowSectorSuggestions(false);
   };
 
   if (loading) {
@@ -1028,24 +1175,60 @@ function ContactFormPage() {
           />
         </div>
 
-        <div className="form-group">
+        <div className="form-group autocomplete-group">
           <label>Sector (comma separated)</label>
-          <input
-            type="text"
-            value={form.sectors}
-            onChange={e => setForm({...form, sectors: e.target.value})}
-            placeholder="VC, Fintech, AI, SaaS"
-          />
+          <div className="autocomplete-wrapper">
+            <input
+              type="text"
+              value={form.sectors}
+              onChange={e => handleSectorsChange(e.target.value)}
+              onBlur={() => setTimeout(() => setShowSectorSuggestions(false), 200)}
+              onFocus={() => { if (sectorSuggestions.length > 0) setShowSectorSuggestions(true); }}
+              placeholder="VC, Fintech, AI, SaaS"
+            />
+            {showSectorSuggestions && (
+              <div className="autocomplete-dropdown">
+                {sectorSuggestions.map((sector, idx) => (
+                  <button key={idx} type="button" className="autocomplete-item" onClick={() => addSectorSuggestion(sector)}>
+                    {sector}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          {allSectors.length > 0 && (
+            <div className="existing-tags-hint">
+              Existing: {allSectors.slice(0, 5).join(', ')}{allSectors.length > 5 ? ` +${allSectors.length - 5} more` : ''}
+            </div>
+          )}
         </div>
 
-        <div className="form-group">
+        <div className="form-group autocomplete-group">
           <label>Tags (comma separated)</label>
-          <input
-            type="text"
-            value={form.tags}
-            onChange={e => setForm({...form, tags: e.target.value})}
-            placeholder="investor, advisor, NYC"
-          />
+          <div className="autocomplete-wrapper">
+            <input
+              type="text"
+              value={form.tags}
+              onChange={e => handleTagsChange(e.target.value)}
+              onBlur={() => setTimeout(() => setShowTagSuggestions(false), 200)}
+              onFocus={() => { if (tagSuggestions.length > 0) setShowTagSuggestions(true); }}
+              placeholder="investor, advisor, NYC"
+            />
+            {showTagSuggestions && (
+              <div className="autocomplete-dropdown">
+                {tagSuggestions.map((tag, idx) => (
+                  <button key={idx} type="button" className="autocomplete-item" onClick={() => addTagSuggestion(tag)}>
+                    {tag}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          {allTags.length > 0 && (
+            <div className="existing-tags-hint">
+              Existing: {allTags.slice(0, 5).join(', ')}{allTags.length > 5 ? ` +${allTags.length - 5} more` : ''}
+            </div>
+          )}
         </div>
 
         <div className="form-group">
