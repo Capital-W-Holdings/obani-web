@@ -1,5 +1,6 @@
 import { useState, useEffect, createContext, useContext } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, Link, useParams, useNavigate } from 'react-router-dom';
+import { jsPDF } from 'jspdf';
 import { auth, contacts, interactions, introductions, analytics } from './services/api';
 import type { Contact, Interaction, Introduction, AnalyticsDashboard, AuthState, InteractionType, Sentiment } from './types';
 import './App.css';
@@ -707,6 +708,162 @@ function ContactDetailPage() {
     }
   };
 
+  const exportToPDF = () => {
+    if (!contact) return;
+
+    const doc = new jsPDF();
+    const pageWidth = doc.internal.pageSize.getWidth();
+    let y = 20;
+
+    // Helper to add text with word wrap
+    const addText = (text: string, x: number, yPos: number, maxWidth: number, fontSize = 10) => {
+      doc.setFontSize(fontSize);
+      const lines = doc.splitTextToSize(text, maxWidth);
+      doc.text(lines, x, yPos);
+      return yPos + (lines.length * fontSize * 0.4);
+    };
+
+    // Title
+    doc.setFontSize(24);
+    doc.setFont('helvetica', 'bold');
+    doc.text(`${contact.firstName} ${contact.lastName || ''}`, 20, y);
+    y += 10;
+
+    // Subtitle
+    if (contact.title && contact.company) {
+      doc.setFontSize(12);
+      doc.setFont('helvetica', 'normal');
+      doc.text(`${contact.title} at ${contact.company}`, 20, y);
+      y += 8;
+    } else if (contact.company) {
+      doc.setFontSize(12);
+      doc.setFont('helvetica', 'normal');
+      doc.text(contact.company, 20, y);
+      y += 8;
+    }
+
+    // Relationship Strength
+    const strength = getEffectiveStrength(contact);
+    doc.setFontSize(10);
+    doc.text(`Relationship Strength: ${'★'.repeat(strength.current)}${'☆'.repeat(5 - strength.current)}`, 20, y);
+    y += 12;
+
+    // Divider
+    doc.setDrawColor(200);
+    doc.line(20, y, pageWidth - 20, y);
+    y += 10;
+
+    // Contact Information Section
+    doc.setFontSize(14);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Contact Information', 20, y);
+    y += 8;
+
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    if (contact.email) { doc.text(`Email: ${contact.email}`, 20, y); y += 6; }
+    if (contact.phone) { doc.text(`Phone: ${contact.phone}`, 20, y); y += 6; }
+    if (contact.location) { doc.text(`Location: ${contact.location}`, 20, y); y += 6; }
+    if (contact.linkedinUrl) { doc.text(`LinkedIn: ${contact.linkedinUrl}`, 20, y); y += 6; }
+    y += 6;
+
+    // Tags & Sectors
+    if (contact.tags?.length || contact.sectors?.length) {
+      doc.setFontSize(14);
+      doc.setFont('helvetica', 'bold');
+      doc.text('Tags & Sectors', 20, y);
+      y += 8;
+
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'normal');
+      if (contact.tags?.length) { doc.text(`Tags: ${contact.tags.join(', ')}`, 20, y); y += 6; }
+      if (contact.sectors?.length) { doc.text(`Sectors: ${contact.sectors.join(', ')}`, 20, y); y += 6; }
+      y += 6;
+    }
+
+    // Needs & Offers
+    if (contact.needs?.length || contact.offers?.length) {
+      doc.setFontSize(14);
+      doc.setFont('helvetica', 'bold');
+      doc.text('Value Exchange', 20, y);
+      y += 8;
+
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'normal');
+      if (contact.needs?.length) { y = addText(`Their Needs: ${contact.needs.join(', ')}`, 20, y, pageWidth - 40); y += 4; }
+      if (contact.offers?.length) { y = addText(`They Offer: ${contact.offers.join(', ')}`, 20, y, pageWidth - 40); y += 4; }
+      y += 6;
+    }
+
+    // How We Met
+    if (contact.howWeMet) {
+      doc.setFontSize(14);
+      doc.setFont('helvetica', 'bold');
+      doc.text('How We Met', 20, y);
+      y += 8;
+
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'normal');
+      y = addText(contact.howWeMet, 20, y, pageWidth - 40);
+      y += 10;
+    }
+
+    // Notes
+    if (contact.notes) {
+      doc.setFontSize(14);
+      doc.setFont('helvetica', 'bold');
+      doc.text('Notes', 20, y);
+      y += 8;
+
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'normal');
+      y = addText(contact.notes, 20, y, pageWidth - 40);
+      y += 10;
+    }
+
+    // Recent Interactions
+    if (contactInteractions.length > 0) {
+      // Check if we need a new page
+      if (y > 240) {
+        doc.addPage();
+        y = 20;
+      }
+
+      doc.setFontSize(14);
+      doc.setFont('helvetica', 'bold');
+      doc.text('Recent Interactions', 20, y);
+      y += 10;
+
+      contactInteractions.slice(0, 5).forEach(int => {
+        if (y > 270) {
+          doc.addPage();
+          y = 20;
+        }
+
+        doc.setFontSize(10);
+        doc.setFont('helvetica', 'bold');
+        const dateStr = new Date(int.date).toLocaleDateString();
+        doc.text(`${int.type} - ${dateStr}`, 20, y);
+        y += 6;
+
+        if (int.notes) {
+          doc.setFont('helvetica', 'normal');
+          y = addText(int.notes, 20, y, pageWidth - 40, 9);
+          y += 4;
+        }
+        y += 4;
+      });
+    }
+
+    // Footer
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'italic');
+    doc.text(`Generated from Obani on ${new Date().toLocaleDateString()}`, 20, 285);
+
+    // Save the PDF
+    doc.save(`${contact.firstName}_${contact.lastName || 'Contact'}_Profile.pdf`);
+  };
+
   const handleDelete = async () => {
     if (!contact || !confirm(`Delete ${contact.firstName}? This cannot be undone.`)) return;
     const res = await contacts.delete(contact.id);
@@ -773,6 +930,7 @@ function ContactDetailPage() {
       <div className="detail-header">
         <button className="back-btn" onClick={() => navigate('/contacts')}>← Back</button>
         <div className="detail-actions">
+          <button className="btn pdf-export" onClick={exportToPDF}>📄 Export PDF</button>
           <Link to={`/contacts/${contact.id}/edit`} className="btn secondary">Edit</Link>
           <button className="btn danger" onClick={handleDelete}>Delete</button>
         </div>
